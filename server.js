@@ -10,8 +10,15 @@ const receiptRoutes = require("./routes/receiptRoutes");
 const vendorRoutes = require('./routes/vendorRoutes');
 const purchaseRoutes = require('./routes/purchaseRoutes');
 const subcontractRoutes = require("./routes/subcontractRoutes");
+const workSubcontractRoutes = require("./routes/workSubcontractRoutes");
 
 const app = express();
+
+const voucherRoutes = require("./routes/voucherRoutes");
+
+const labourRoutes = require("./routes/labourRoutes");
+
+const attendanceRoutes = require("./routes/attendanceRoutes");
 
 // connect database
 connectDB();
@@ -29,7 +36,17 @@ app.use("/api/vendor", vendorRoutes);
 app.use("/api/purchase", purchaseRoutes);
 
 app.use("/api/subcontract", subcontractRoutes);
+app.use("/api/workSubcontract", workSubcontractRoutes);
 
+app.use('/api/purchases', purchaseRoutes);
+
+app.use('/uploads', express.static('uploads'));
+
+app.use("/api/vouchers", voucherRoutes);
+
+app.use("/api/labours", labourRoutes);
+
+app.use("/api/attendance", attendanceRoutes);
 
 const PORT = process.env.PORT || 5000;
 
