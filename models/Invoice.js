@@ -2,12 +2,12 @@ const mongoose = require("mongoose");
 
 const invoiceSchema = new mongoose.Schema(
 {
-   invoiceNumber: {
+  invoiceNumber: {
     type: String,
     unique: true,
     index: true
   },
-  
+
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
@@ -19,34 +19,47 @@ const invoiceSchema = new mongoose.Schema(
     required: true
   },
 
-  project: {
+  subject: {
     type: String,
     required: true
   },
 
-  quantity: {
-    type: Number,
-    required: true,
-    min: 0
+  notes: {
+    type: String,
+    trim: true,
+    default: ""
   },
 
-  rate: {
-    type: Number,
-    required: true,
-    min: 0
-  },
+  // Products stored directly inside invoice
+  products: [
+    {
+      serialNo: {
+        type: Number
+      },
 
-  amount: {
-    type: Number,
-    default: 0
-  },
+      description: {
+        type: String,
+        required: true
+      },
 
-  gst: {
-    type: Number,
-    default: 0
-  },
+      quantity: {
+        type: Number,
+        required: true
+      },
 
-  gstAmount: {
+      rate: {
+        type: Number,
+        required: true
+      },
+
+      amount: {
+        type: Number,
+        required: true
+      }
+    }
+  ],
+
+  totalAmount: {
     type: Number,
     default: 0
   },
@@ -63,7 +76,7 @@ const invoiceSchema = new mongoose.Schema(
 
   paymentStatus: {
     type: String,
-    enum: ["Unpaid", "Partial", "Paid"],
+    enum: ["Unpaid", "Partial", "Paid", "AdvancePayment"],
     default: "Unpaid"
   }
 

@@ -18,7 +18,10 @@ exports.createClient = async (req, res) => {
       clientCode,
       name: req.body.name,
       phone: req.body.phone,
-      address: req.body.address
+      address: req.body.address,
+      contactPerson: req.body.contactPerson,
+      emailid: req.body.emailid,
+      gstnumber: req.body.gstnumber
     });
 
     const savedClient = await client.save();
@@ -69,7 +72,7 @@ exports.updateClient = async (req, res) => {
     const updatedClient = await Client.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     res.json(updatedClient);

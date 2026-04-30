@@ -1,20 +1,48 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const vendorSchema = new mongoose.Schema({
+const vendorSchema = new mongoose.Schema(
+{
   vendorCode: {
     type: String,
-    unique: true
+    required: true,
+    unique: true,
+    trim: true
   },
+
   name: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
-  phone: String,
-  address: String,
-  gstNo: String,
-  notes: {
-    type: String
-  }
-}, { timestamps: true });
 
-module.exports = mongoose.model('Vendor', vendorSchema);
+  phone: {
+    type: String,
+    trim: true
+  },
+
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true
+  },
+
+  address: {
+    type: String,
+    trim: true
+  },
+
+  gstNo: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
+
+  website: {
+    type: String,
+    trim: true
+  }
+},
+{ timestamps: true }
+);
+
+module.exports = mongoose.model("Vendor", vendorSchema);

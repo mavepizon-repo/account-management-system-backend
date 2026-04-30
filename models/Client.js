@@ -20,6 +20,23 @@ const clientSchema = new mongoose.Schema(
   address: {
     type: String,
     required: true
+  },
+
+  contactPerson: {
+    type: String,
+    required: true
+  },
+
+  emailid: {
+    type: String,
+    required:true,
+    lowercase:true
+  },
+
+  gstnumber: {
+    type: String,
+    required:true,
+    uppercase:true
   }
 },
 { timestamps: true }

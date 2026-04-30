@@ -29,6 +29,11 @@ const receiptSchema = new mongoose.Schema(
     unique: true
   },
 
+  description: {
+    type: String,
+    default: ""
+  },
+
   receiptPdf: {
     type: String   // path of pdf file
   }

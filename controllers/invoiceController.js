@@ -1,5 +1,4 @@
 const Invoice = require("../models/Invoice");
-const Client = require("../models/Client");
 
 
 // CREATE INVOICE
@@ -9,17 +8,13 @@ exports.createInvoice = async (req, res) => {
     const {
       client,
       date,
-      project,
-      quantity,
-      rate,
-      amount,
-      gst,
-      gstAmount,
-      grandTotal,
+      subject,
+      notes,
+      products = [],
       paidAmount = 0
     } = req.body;
 
-    // 🔥 AUTO INVOICE NUMBER
+    // AUTO GENERATE INVOICE NUMBER
     const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
 
     let invoiceNumber = "INV0001";
@@ -29,30 +24,47 @@ exports.createInvoice = async (req, res) => {
       invoiceNumber = "INV" + String(num).padStart(4, "0");
     }
 
-    // Convert values (IMPORTANT SAFE STEP)
-    const paid = Number(paidAmount);
-    const total = Number(grandTotal);
+    // PROCESS PRODUCTS
+    let totalAmount = 0;
 
-    // Determine payment status
+    const productList = products.map((item, index) => {
+
+      const amount = item.quantity * item.rate;
+      totalAmount += amount;
+
+      return {
+        serialNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount
+      };
+    });
+
+    const grandTotal = totalAmount;
+    const paid = Number(paidAmount);
+
+    // PAYMENT STATUS
     let paymentStatus = "Unpaid";
 
-    if (paid > 0 && paid < total) {
-      paymentStatus = "Partial";
+    if (paid > grandTotal) {
+      paymentStatus = "AdvancePayment";
     } 
-    else if (paid >= total) {
+    else if (paid === grandTotal && grandTotal > 0) {
       paymentStatus = "Paid";
+    } 
+    else if (paid > 0 && paid < grandTotal) {
+      paymentStatus = "Partial";
     }
 
     const invoice = new Invoice({
-      invoiceNumber, // 🔥 ADD THIS
+      invoiceNumber,
       client,
       date,
-      project,
-      quantity,
-      rate,
-      amount,
-      gst,
-      gstAmount,
+      subject,
+      notes,
+      products: productList,
+      totalAmount,
       grandTotal,
       paidAmount: paid,
       paymentStatus
@@ -73,6 +85,8 @@ exports.createInvoice = async (req, res) => {
   }
 };
 
+
+
 // GET ALL INVOICES
 exports.getAllInvoices = async (req, res) => {
   try {
@@ -89,6 +103,7 @@ exports.getAllInvoices = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 // GET INVOICE BY ID
@@ -112,12 +127,12 @@ exports.getInvoiceByInvoiceId = async (req, res) => {
 };
 
 
+
+// GET INVOICES BY CLIENT ID
 exports.getInvoicesByClientId = async (req, res) => {
   try {
 
-    const clientId = req.params.clientId;
-
-    const invoices = await Invoice.find({ client: clientId })
+    const invoices = await Invoice.find({ client: req.params.clientId })
       .populate("client", "clientCode name");
 
     res.status(200).json({
@@ -134,38 +149,13 @@ exports.getInvoicesByClientId = async (req, res) => {
 };
 
 
+
 // GET INVOICES BY PAYMENT STATUS
 exports.getInvoicesByStatus = async (req, res) => {
   try {
 
-    const paymentStatus = req.params.paymentStatus; // Unpaid / Partial / Paid
-
-    const invoices = await Invoice.find({ paymentStatus: paymentStatus })
-      .populate("client", "clientCode name");
-
-    res.status(200).json({
-      count: invoices.length,
-      data: invoices
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      message: "Error fetching invoices by status",
-      error: error.message
-    });
-  }
-};
-
-
-// GET INVOICES BY CLIENT ID AND PAYMENT STATUS
-exports.getInvoicesByClientAndStatus = async (req, res) => {
-  try {
-
-    const { clientId, paymentStatus } = req.params;
-
     const invoices = await Invoice.find({
-      client: clientId,
-      paymentStatus: paymentStatus
+      paymentStatus: req.params.paymentStatus
     }).populate("client", "clientCode name");
 
     res.status(200).json({
@@ -182,47 +172,16 @@ exports.getInvoicesByClientAndStatus = async (req, res) => {
 };
 
 
-// UPDATE INVOICE
-exports.updateInvoice = async (req, res) => {
+
+// UPDATE INVOICE BASIC DETAILS
+exports.updateInvoiceByInvoiceId = async (req, res) => {
   try {
 
-    const {
-      client,
-      date,
-      project,
-      quantity,
-      rate,
-      amount,
-      gst,
-      gstAmount,
-      grandTotal,
-      paidAmount = 0
-    } = req.body;
-
-    let paymentStatus = "Unpaid";
-
-    if (paidAmount > 0 && paidAmount < grandTotal) {
-      paymentStatus = "Partial";
-    } 
-    else if (paidAmount >= grandTotal) {
-      paymentStatus = "Paid";
-    }
+    const { date, subject, notes } = req.body;
 
     const updatedInvoice = await Invoice.findByIdAndUpdate(
-      req.params.id,
-      {
-        client,
-        date,
-        project,
-        quantity,
-        rate,
-        amount,
-        gst,
-        gstAmount,
-        grandTotal,
-        paidAmount,
-        paymentStatus
-      },
+      req.params.invoiceId,
+      { date, subject, notes },
       { new: true }
     ).populate("client", "clientCode name");
 
@@ -241,15 +200,68 @@ exports.updateInvoice = async (req, res) => {
 };
 
 
+
+// UPDATE PRODUCTS IN AN INVOICE
+exports.updateInvoiceProducts = async (req, res) => {
+  try {
+
+    const { invoiceId } = req.params;
+    const { products } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId);
+
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    let totalAmount = 0;
+
+    const updatedProducts = products.map((item, index) => {
+
+      const amount = item.quantity * item.rate;
+      totalAmount += amount;
+
+      return {
+        serialNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount
+      };
+    });
+
+    invoice.products = updatedProducts;
+    invoice.totalAmount = totalAmount;
+    invoice.grandTotal = totalAmount;
+
+    await invoice.save();
+
+    res.status(200).json({
+      message: "Products updated successfully",
+      data: invoice
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating products",
+      error: error.message
+    });
+  }
+};
+
+
+
 // DELETE INVOICE
 exports.deleteInvoice = async (req, res) => {
   try {
 
-    const deletedInvoice = await Invoice.findByIdAndDelete(req.params.id);
+    const invoice = await Invoice.findById(req.params.invoiceId);
 
-    if (!deletedInvoice) {
+    if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
+
+    await Invoice.findByIdAndDelete(req.params.invoiceId);
 
     res.status(200).json({
       message: "Invoice Deleted Successfully"
@@ -259,4 +271,3 @@ exports.deleteInvoice = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-

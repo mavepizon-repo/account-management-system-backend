@@ -15,7 +15,7 @@ router.get("/get-by-invoice/:invoiceId", receiptController.getReceiptsByInvoiceI
 // GET RECEIPTS BY CLIENT ID
 router.get("/get-by-client/:clientId", receiptController.getReceiptsByClientId);
 
-// GET RECEIPT BY ID
+// GET RECEIPT BY Receipt ID
 router.get("/get/:id", receiptController.getReceiptById);
 
 router.put("/update/:id", receiptController.updateReceipt);
