@@ -1,109 +1,47 @@
-// const express = require('express');
-// const router = express.Router();
-
-
-
-// const {
-//   createPurchase,
-//   getPurchases,
-//   getPurchaseById,
-//   getPurchasesByVendor,
-//   updatePurchase,
-//   updatePayment,
-//   deletePurchase
-// } = require('../controllers/purchaseController');
-
-// // controller import pannanum
-// const {
-//   getPurchasesByStatus
-// } = require('../controllers/purchaseController');
-
-// // ================== PURCHASE BILL ==================
-
-// // ✅ CREATE PURCHASE BILL
-// router.post('/add/purchasebill', createPurchase);
-
-
-// // ✅ GET ALL PURCHASE BILLS
-// router.get('/getall/purchasebill', getPurchases);
-
-
-// // ✅ GET PURCHASE BILL BY ID
-// router.get('/get/purchasebill/:id', getPurchaseById);
-
-
-// // ✅ GET PURCHASE BILL BY VENDOR
-// router.get('/get/purchasebill/vendor/:vendorId', getPurchasesByVendor);
-
-
-// // ✅ UPDATE PURCHASE BILL
-// router.put('/edit/purchasebill/:id', updatePurchase);
-
-
-// // ✅ UPDATE PAYMENT (STATUS AUTO)
-// router.put('/pay/purchasebill/:id', updatePayment);
-
-
-// // ✅ DELETE PURCHASE BILL
-// router.delete('/delete/purchasebill/:id', deletePurchase);
-
-
-// // STATUS WISE (paid,unpaid,partial)
-// router.get('/status/:status', getPurchasesByStatus);
-
-// // VENDOR ID + STATUS 
-// router.get('/vendor/:vendorId/:status', getPurchasesByVendorAndStatus);
-
-// module.exports = router;
-
-// ================================
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 const {
   createPurchase,
-  getPurchases,
+  getAllPurchases,
   getPurchaseById,
-  getPurchasesByVendor,
-  getPurchasesByVendorAndStatus,
+  getPurchasesByVendorId,
   getPurchasesByStatus,
+  getPurchasesByStatusAndVendor,
   updatePurchase,
-  updatePayment,
+  updatePurchaseProducts,
   deletePurchase
-} = require('../controllers/purchaseController');
+} = require("../controllers/purchaseController");
 
-
-// ================== PURCHASE BILL ==================
 
 // CREATE
-router.post('/add/purchasebill', createPurchase);
+router.post("/add", createPurchase);
 
 // GET ALL
-router.get('/getall/purchasebill', getPurchases);
+router.get("/all", getAllPurchases);
 
-// GET BY ID
-router.get('/get/purchasebill/:id', getPurchaseById);
+// VENDOR
+router.get("/get-by-vendor/:vendorId", getPurchasesByVendorId);
 
-// GET BY VENDOR
-router.get('/get/purchasebill/vendor/:vendorId', getPurchasesByVendor);
-
-// UPDATE
-router.put('/edit/purchasebill/:id', updatePurchase);
-
-// PAYMENT
-router.put('/pay/purchasebill/:id', updatePayment);
-
-// DELETE
-router.delete('/delete/purchasebill/:id', deletePurchase);
-
-// STATUS WISE
-router.get('/status/:status', getPurchasesByStatus);
-
+// STATUS
+router.get("/get-by-status/:paymentStatus", getPurchasesByStatus);
 
 // VENDOR + STATUS
-router.get('/vendor/:vendorId/:status', getPurchasesByVendorAndStatus);
+router.get(
+  "/get-by-status-vendor/:vendorId/:paymentStatus",
+  getPurchasesByStatusAndVendor
+);
 
-//VENDOR ID + TOTAL PURCHASE BILL
-router.get('/vendor/:vendorId', getPurchasesByVendor);
+// GET BY ID (keep last)
+router.get("/get/:purchaseId", getPurchaseById);
+
+// UPDATE
+router.put("/update/:purchaseId", updatePurchase);
+
+// UPDATE PRODUCTS
+router.put("/update-products/:purchaseId", updatePurchaseProducts);
+
+// DELETE
+router.delete("/delete/:purchaseId", deletePurchase);
 
 module.exports = router;

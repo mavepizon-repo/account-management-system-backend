@@ -4,23 +4,26 @@ const router = express.Router();
 const voucherController = require("../controllers/voucherController");
 
 
-// ===== CREATE VOUCHER =====
+// CREATE VOUCHER
 router.post("/create", voucherController.createVoucher);
 
 
-// ===== GET ALL VOUCHERS =====
+// GET ALL VOUCHERS
 router.get("/getall", voucherController.getAllVouchers);
 
 
-// ===== GET VOUCHER BY ID =====
-router.get("/get/:id", voucherController.getVoucherById);
+// GET VOUCHER BY ID
+router.get("/get/:voucherId", voucherController.getVoucherById);
 
 
-// ===== UPDATE VOUCHER =====
-router.get("/:id", voucherController.getVoucherById);
+// GET VOUCHERS BY PURCHASE ID
+router.get("/get-by-purchase/:purchaseId", voucherController.getVouchersByPurchaseId);
 
+// UPDATE VOUCHER
+router.put("/update/:voucherId", voucherController.updateVoucher);
 
-// ===== DELETE VOUCHER =====
-router.delete("/delete/:id", voucherController.deleteVoucher);
+// DELETE VOUCHER
+router.delete("/delete/:voucherId", voucherController.deleteVoucher);
+
 
 module.exports = router;

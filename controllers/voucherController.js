@@ -1,544 +1,239 @@
-// const cloudinary = require("../config/cloudinary");
-// const Voucher = require("../models/Voucher");
-// const PDFDocument = require("pdfkit");
-// const fs = require("fs");
-// const path = require("path");
-
-
-// // ===== CREATE VOUCHER =====
-
-// exports.createVoucher = async (req, res) => {
-
-//   try {
-
-//     const {
-//       receiverType,
-//       receiverName,
-//       purpose,
-//       amount,
-//       paymentMethod,
-//       date
-//     } = req.body;
-
-//     if (!receiverType || !receiverName || !purpose || !amount) {
-//       return res.status(400).json({
-//         message: "receiverType, receiverName, purpose and amount are required"
-//       });
-//     }
-
-//     // ===== GENERATE VOUCHER NUMBER =====
-
-//     const lastVoucher = await Voucher.findOne().sort({ createdAt: -1 });
-
-//     let voucherNumber = "VO001";
-
-//     if (lastVoucher && lastVoucher.voucherNumber) {
-
-//       const num = parseInt(lastVoucher.voucherNumber.substring(2)) + 1;
-//       voucherNumber = "VO" + String(num).padStart(3, "0");
-
-//     }
-
-//     // ===== PDF GENERATION =====
-
-//     const pdfPath = path.join(__dirname, `../${voucherNumber}.pdf`);
-
-//     const doc = new PDFDocument({ margin: 50 });
-//     const stream = fs.createWriteStream(pdfPath);
-
-//     doc.pipe(stream);
-
-//     // ===== HEADER =====
-
-//     doc
-//       .fontSize(20)
-//       .font("Helvetica-Bold")
-//       .text("DESIGN ART", { align: "center" });
-
-//     doc
-//       .fontSize(12)
-//       .font("Helvetica")
-//       .text("(Interior and Exterior Solution)", { align: "center" });
-
-//     doc
-//       .fontSize(10)
-//       .text("Accounts Master Ledger", { align: "center" });
-
-//     doc.moveDown();
-//     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-//     doc.moveDown(2);
-
-//     // ===== TITLE =====
-
-//     doc
-//       .fontSize(18)
-//       .font("Helvetica-Bold")
-//       .text("PAYMENT VOUCHER", { align: "center" });
-
-//     doc.moveDown(2);
-
-//     doc.fontSize(11).font("Helvetica");
-
-//     const labelX = 50;
-//     const valueX = 200;
-
-//     doc.text("Voucher Number :", labelX, doc.y);
-//     doc.text(voucherNumber, valueX, doc.y - 14);
-
-//     doc.moveDown();
-
-//     doc.text("Date :", labelX, doc.y);
-//     doc.text(
-//       date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString(),
-//       valueX,
-//       doc.y - 14
-//     );
-
-//     doc.moveDown();
-
-//     doc.text("Receiver Type :", labelX, doc.y);
-//     doc.text(receiverType, valueX, doc.y - 14);
-
-//     doc.moveDown();
-
-//     doc.text("Paid To :", labelX, doc.y);
-//     doc.text(receiverName, valueX, doc.y - 14);
-
-//     doc.moveDown();
-
-//     doc.text("Purpose :", labelX, doc.y);
-//     doc.text(purpose, valueX, doc.y - 14);
-
-//     doc.moveDown();
-
-//     doc.text("Payment Method :", labelX, doc.y);
-//     doc.text(paymentMethod || "cash", valueX, doc.y - 14);
-
-//     doc.moveDown(2);
-
-//     // ===== TABLE =====
-
-//     const tableTop = doc.y;
-
-//     doc
-//       .font("Helvetica-Bold")
-//       .text("Description", 50, tableTop)
-//       .text("Amount (Rs.)", 450, tableTop, { align: "right" });
-
-//     doc.moveDown();
-//     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-
-//     doc.font("Helvetica");
-
-//     const row = (y, text, amount) => {
-
-//       doc.text(text, 50, y);
-
-//       doc.text(`Rs. ${Number(amount).toFixed(2)}`, 450, y, {
-//         align: "right"
-//       });
-
-//     };
-
-//     let rowY = doc.y + 10;
-
-//     row(rowY, "Payment Amount", amount);
-
-//     doc.moveDown(5);
-
-//     // ===== FOOTER =====
-
-//     doc.moveDown(3);
-
-//     doc
-//       .fontSize(11)
-//       .text("Payment received by the above mentioned person.", {
-//         align: "center"
-//       });
-
-//     doc.moveDown(0.5);
-
-//     doc
-//       .fontSize(10)
-//       .text("This is a system generated voucher.", {
-//         align: "center"
-//       });
-
-//     doc.end();
-
-
-//     // ===== UPLOAD TO CLOUDINARY =====
-
-//     stream.on("finish", async () => {
-
-//       try {
-
-//         const result = await cloudinary.uploader.upload(pdfPath, {
-//           resource_type: "raw",
-//           folder: "vouchers",
-//           type: "upload"
-//         });
-
-//         const voucher = new Voucher({
-
-//           voucherNumber,
-//           receiverType,
-//           receiverName,
-//           purpose,
-//           amount,
-//           paymentMethod,
-//           date: date || new Date(),
-//           pdfUrl: result.secure_url
-
-//         });
-
-//         const savedVoucher = await voucher.save();
-
-//         fs.unlinkSync(pdfPath);
-
-//         return res.status(201).json({
-//           message: "Voucher generated successfully",
-//           voucher: savedVoucher
-//         });
-
-//       } catch (uploadError) {
-
-//         return res.status(500).json({
-//           error: "PDF upload failed",
-//           details: uploadError.message
-//         });
-
-//       }
-
-//     });
-
-//   } catch (error) {
-
-//     res.status(500).json({ error: error.message });
-
-//   }
-
-// };
-
-
-
-// // ===== GET ALL VOUCHERS =====
-
-// exports.getAllVouchers = async (req, res) => {
-
-//   try {
-
-//     const vouchers = await Voucher.find();
-
-//     res.status(200).json({
-//       count: vouchers.length,
-//       vouchers
-//     });
-
-//   } catch (error) {
-
-//     res.status(500).json({ error: error.message });
-
-//   }
-
-// };
-
-
-
-// // ===== GET VOUCHER BY ID =====
-
-// exports.getVoucherById = async (req, res) => {
-
-//   try {
-
-//     const voucher = await Voucher.findById(req.params.id);
-
-//     if (!voucher) {
-//       return res.status(404).json({
-//         message: "Voucher not found"
-//       });
-//     }
-
-//     res.status(200).json(voucher);
-
-//   } catch (error) {
-
-//     res.status(500).json({ error: error.message });
-
-//   }
-
-// };
-
-
-
-// // ===== UPDATE VOUCHER =====
-
-// exports.updateVoucher = async (req, res) => {
-
-//   try {
-
-//     const voucher = await Voucher.findById(req.params.id);
-
-//     if (!voucher) {
-//       return res.status(404).json({
-//         message: "Voucher not found"
-//       });
-//     }
-
-//     if (req.body.receiverType !== undefined)
-//       voucher.receiverType = req.body.receiverType;
-
-//     if (req.body.receiverName !== undefined)
-//       voucher.receiverName = req.body.receiverName;
-
-//     if (req.body.purpose !== undefined)
-//       voucher.purpose = req.body.purpose;
-
-//     if (req.body.amount !== undefined)
-//       voucher.amount = Number(req.body.amount);
-
-//     if (req.body.paymentMethod !== undefined)
-//       voucher.paymentMethod = req.body.paymentMethod;
-
-//     if (req.body.date !== undefined)
-//       voucher.date = new Date(req.body.date);
-
-//     const updatedVoucher = await voucher.save();
-
-//     res.status(200).json({
-//       message: "Voucher updated successfully",
-//       voucher: updatedVoucher
-//     });
-
-//   } catch (error) {
-
-//     res.status(500).json({ error: error.message });
-
-//   }
-
-// };
-
-
-
-// // ===== DELETE VOUCHER =====
-
-// exports.deleteVoucher = async (req, res) => {
-
-//   try {
-
-//     const voucher = await Voucher.findById(req.params.id);
-
-//     if (!voucher) {
-//       return res.status(404).json({
-//         message: "Voucher not found"
-//       });
-//     }
-
-//     await voucher.deleteOne();
-
-//     res.status(200).json({
-//       message: "Voucher deleted successfully"
-//     });
-
-//   } catch (error) {
-
-//     res.status(500).json({ error: error.message });
-
-//   }
-
-// };
+const Voucher = require("../models/Voucher");
+const Purchase = require("../models/Purchase");
 
 const cloudinary = require("../config/cloudinary");
-const Voucher = require("../models/Voucher");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 
 
-// ===== CREATE VOUCHER =====
+// ===============================
+// CREATE VOUCHER
+// ===============================
 exports.createVoucher = async (req, res) => {
+
   try {
 
     const {
+      purchaseId,
       receiverType,
       receiverName,
       purpose,
       amount,
-      paidAmount = 0,
-      paymentMethod,
-      date
+      paymentMethod
     } = req.body;
 
-    if (!receiverType || !receiverName || !purpose || !amount) {
+    if (!amount || amount <= 0) {
       return res.status(400).json({
-        message: "receiverType, receiverName, purpose and amount are required"
+        message: "Amount must be greater than 0"
       });
     }
 
-    // ===== CALCULATION =====
-    const totalAmount = Number(amount);
-    const paid = Number(paidAmount);
-    const balance = totalAmount - paid;
+    const purchase = await Purchase.findById(purchaseId).populate("vendor");
 
-    // ===== GENERATE VOUCHER NUMBER =====
-    const lastVoucher = await Voucher.findOne().sort({ createdAt: -1 });
-
-    let voucherNumber = "VO001";
-
-    if (lastVoucher && lastVoucher.voucherNumber) {
-      const num = parseInt(lastVoucher.voucherNumber.substring(2)) + 1;
-      voucherNumber = "VO" + String(num).padStart(3, "0");
+    if (!purchase) {
+      return res.status(404).json({
+        message: "Purchase not found"
+      });
     }
 
-    // ===== PDF GENERATION =====
-    const pdfPath = path.join(__dirname, `../${voucherNumber}.pdf`);
+    const remainingAmount = purchase.grandTotal - purchase.paidAmount;
+
+    if (amount > remainingAmount) {
+      return res.status(400).json({
+        message: "Payment exceeds remaining balance",
+        remainingAmount
+      });
+    }
+
+    // ===============================
+    // UPDATE PURCHASE
+    // ===============================
+
+    const newPaidAmount = purchase.paidAmount + amount;
+
+    let paymentStatus = "Unpaid";
+
+    if (newPaidAmount > 0 && newPaidAmount < purchase.grandTotal) {
+      paymentStatus = "Partial";
+    }
+    else if (newPaidAmount === purchase.grandTotal) {
+      paymentStatus = "Paid";
+    }
+
+    purchase.paidAmount = newPaidAmount;
+    purchase.paymentStatus = paymentStatus;
+
+    await purchase.save();
+
+    // ===============================
+    // VOUCHER NUMBER
+    // ===============================
+
+    const lastVoucher = await Voucher.findOne().sort({ createdAt: -1 });
+
+    let voucherNumber = "VCH0001";
+
+    if (lastVoucher) {
+      const num = parseInt(lastVoucher.voucherNumber.substring(3)) + 1;
+      voucherNumber = "VCH" + String(num).padStart(4, "0");
+    }
+
+    // ===============================
+    // TEMP PDF
+    // ===============================
+
+    const uploadDir = path.join(__dirname, "../uploads");
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const pdfPath = path.join(uploadDir, `${voucherNumber}.pdf`);
 
     const doc = new PDFDocument({ margin: 50 });
     const stream = fs.createWriteStream(pdfPath);
 
     doc.pipe(stream);
 
-    // ===== HEADER =====
-    doc.fontSize(20).font("Helvetica-Bold").text("DESIGN ART", { align: "center" });
+    // ===============================
+    // HEADER
+    // ===============================
 
-    doc.fontSize(12).font("Helvetica")
-      .text("(Interior and Exterior Solution)", { align: "center" });
+    const startX = 50;
+    const startY = 50;
 
-    doc.fontSize(10)
-      .text("Accounts Master Ledger", { align: "center" });
+    const logoPath = path.join(__dirname, "../assets/logo.jpeg");
 
-    doc.moveDown();
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown(2);
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, startX, startY, { width: 110 });
+    }
 
-    // ===== TITLE =====
-    doc.fontSize(18).font("Helvetica-Bold")
-      .text("PAYMENT VOUCHER", { align: "center" });
-
-    doc.moveDown(2);
-    doc.fontSize(11).font("Helvetica");
-
-    const labelX = 50;
-    const valueX = 200;
-
-    doc.text("Voucher Number :", labelX, doc.y);
-    doc.text(voucherNumber, valueX, doc.y - 14);
-
-    doc.moveDown();
-
-    doc.text("Date :", labelX, doc.y);
-    doc.text(
-      date ? new Date(date).toLocaleDateString() : new Date().toLocaleDateString(),
-      valueX,
-      doc.y - 14
-    );
-
-    doc.moveDown();
-
-    doc.text("Receiver Type :", labelX, doc.y);
-    doc.text(receiverType, valueX, doc.y - 14);
-
-    doc.moveDown();
-
-    doc.text("Paid To :", labelX, doc.y);
-    doc.text(receiverName, valueX, doc.y - 14);
-
-    doc.moveDown();
-
-    doc.text("Purpose :", labelX, doc.y);
-    doc.text(purpose, valueX, doc.y - 14);
-
-    doc.moveDown();
-
-    doc.text("Payment Method :", labelX, doc.y);
-    doc.text(paymentMethod || "cash", valueX, doc.y - 14);
-
-    doc.moveDown(2);
-
-    // ===== TABLE =====
-    const tableTop = doc.y;
-
-    doc.font("Helvetica-Bold")
-      .text("Description", 50, tableTop)
-      .text("Amount (Rs.)", 450, tableTop, { align: "right" });
-
-    doc.moveDown();
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-
-    doc.font("Helvetica");
-
-    const row = (y, text, amount) => {
-      doc.text(text, 50, y);
-      doc.text(`Rs. ${Number(amount).toFixed(2)}`, 450, y, { align: "right" });
-    };
-
-    let rowY = doc.y + 10;
-
-    row(rowY, "Total Amount", totalAmount);
-    rowY += 20;
-
-    row(rowY, "Paid Amount", paid);
-    rowY += 20;
-
-    row(rowY, "Balance Amount", balance);
-
-    doc.moveDown(3);
-
-    // ===== FOOTER =====
-    // doc.fontSize(11)
-    //   .text("Payment received by the above mentioned person.", {
-    //     align: "center"
-    //   });
-
-    // doc.moveDown(0.5);
-
-    // doc.fontSize(10)
-    //   .text("This is a system generated voucher.", {
-    //     align: "center"
-    //   });
-
-    // doc.end();
-
-     // ===== FOOTER =====
-
-    doc.moveDown(3);
+    const rightX = 180;
 
     doc
-      .fontSize(11)
-      .text("Payment received by the above mentioned person.", {
-        align: "center"
-      });
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .text("DESIGN ART", rightX, startY);
 
     doc.moveDown(0.5);
 
     doc
+      .font("Helvetica")
       .fontSize(10)
-      .text("This is a system generated voucher.", {
-        align: "center"
-      });
+      .text(
+        "5-6, Indria Nagar, PM Samy Colony, Ratinapuri, Gandhipuram, Coimbatore - 641012",
+        rightX,
+        doc.y,
+        { width: 350 }
+      );
+
+    doc.moveDown(0.3);
+
+    doc.text(
+      "Phone: +91 9677731326 | GST: 33BNCPP2332Q1ZT",
+      rightX,
+      doc.y,
+      { width: 350 }
+    );
+
+    const lineY = Math.max(doc.y + 10, startY + 100);
+    doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
+
+    // ===============================
+    // TITLE
+    // ===============================
+
+    doc
+      .fontSize(18)
+      .font("Helvetica-Bold")
+      .text("PAYMENT VOUCHER", 0, lineY + 20, { align: "center" });
+
+    // ===============================
+    // INFO BOX
+    // ===============================
+
+    const boxTop = lineY + 60;
+
+    doc.rect(50, boxTop, 500, 120).stroke();
+
+    doc.fontSize(11).font("Helvetica");
+
+    let infoY = boxTop + 15;
+
+    const infoRow = (label, value) => {
+      doc.text(label, 70, infoY);
+      doc.text(value, 200, infoY);
+      infoY += 20;
+    };
+
+    infoRow("Voucher Number:", voucherNumber);
+    infoRow("Date:", new Date().toLocaleDateString());
+    infoRow("Receiver:", receiverName);
+    infoRow("Receiver Type:", receiverType);
+    infoRow("Purpose:", purpose);
+
+    // ===============================
+    // TABLE
+    // ===============================
+
+    const tableTop = boxTop + 150;
+
+    doc
+      .font("Helvetica-Bold")
+      .text("Description", 70, tableTop)
+      .text("Amount (Rs.)", 400, tableTop, { align: "right" });
+
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    doc.font("Helvetica");
+
+    let y = tableTop + 35;
+
+    const row = (label, value) => {
+      doc.text(label, 70, y);
+      doc.text(`Rs. ${Number(value).toFixed(2)}`, 400, y, { align: "right" });
+      y += 25;
+    };
+
+    row("Purchase Total", purchase.grandTotal);
+    row("Voucher Amount", amount);
+    row("Total Paid Till Now", newPaidAmount);
+    row("Remaining Balance", purchase.grandTotal - newPaidAmount);
+
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+
+    // ===============================
+    // FOOTER
+    // ===============================
+
+    doc
+      .fontSize(11)
+      .text("Authorized Signature", 400, y + 60);
 
     doc.end();
 
-    // ===== UPLOAD TO CLOUDINARY =====
+    // ===============================
+    // CLOUDINARY UPLOAD
+    // ===============================
+
     stream.on("finish", async () => {
+
       try {
 
         const result = await cloudinary.uploader.upload(pdfPath, {
           resource_type: "raw",
-          folder: "vouchers",
-          type: "upload"
+          folder: "vouchers"
         });
 
         const voucher = new Voucher({
           voucherNumber,
+          purchase: purchase._id,
           receiverType,
           receiverName,
           purpose,
-          amount: totalAmount,
-          paidAmount: paid,
-          balanceAmount: balance,
+          amount,
           paymentMethod,
-          date: date || new Date(),
           pdfUrl: result.secure_url
         });
 
@@ -546,49 +241,76 @@ exports.createVoucher = async (req, res) => {
 
         fs.unlinkSync(pdfPath);
 
-        return res.status(201).json({
-          message: "Voucher generated successfully",
-          voucher: savedVoucher
+        res.status(201).json({
+          message: "Voucher created successfully",
+          voucher: savedVoucher,
+          updatedPurchase: purchase
         });
 
-      } catch (uploadError) {
-        return res.status(500).json({
-          error: "PDF upload failed",
-          details: uploadError.message
+      } catch (err) {
+
+        res.status(500).json({
+          error: "Cloudinary upload failed",
+          details: err.message
         });
+
       }
+
     });
 
-  } catch (error) {
+  }
+  catch (error) {
     res.status(500).json({ error: error.message });
   }
+
 };
 
 
-// ===== GET ALL =====
+// GET ALL VOUCHERS
 exports.getAllVouchers = async (req, res) => {
   try {
-    const vouchers = await Voucher.find();
+
+    const vouchers = await Voucher.find()
+      .populate({
+        path: "purchase",
+        populate: {
+          path: "vendor",
+          select: "vendorCode name"
+        }
+      });
+
     res.status(200).json({
       count: vouchers.length,
-      vouchers
+      data: vouchers
     });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
 
-// ===== GET BY ID =====
+
+// GET VOUCHER BY ID
 exports.getVoucherById = async (req, res) => {
   try {
-    const voucher = await Voucher.findById(req.params.id);
+
+    const voucher = await Voucher.findById(req.params.voucherId)
+      .populate({
+        path: "purchase",
+        populate: {
+          path: "vendor",
+          select: "vendorCode name"
+        }
+      });
 
     if (!voucher) {
       return res.status(404).json({ message: "Voucher not found" });
     }
 
-    res.status(200).json(voucher);
+    res.status(200).json({
+      data: voucher
+    });
 
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -596,86 +318,144 @@ exports.getVoucherById = async (req, res) => {
 };
 
 
-// ===== UPDATE =====
-// exports.updateVoucher = async (req, res) => {
-//   try {
-//     const voucher = await Voucher.findById(req.params.id);
 
-//     if (!voucher) {
-//       return res.status(404).json({ message: "Voucher not found" });
-//     }
+// GET VOUCHERS BY PURCHASE ID
+exports.getVouchersByPurchaseId = async (req, res) => {
+  try {
 
-//     Object.assign(voucher, req.body);
+    const vouchers = await Voucher.find({
+      purchase: req.params.purchaseId
+    });
 
-//     const updatedVoucher = await voucher.save();
+    res.status(200).json({
+      count: vouchers.length,
+      data: vouchers
+    });
 
-//     res.status(200).json({
-//       message: "Voucher updated successfully",
-//       voucher: updatedVoucher
-//     });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching vouchers",
+      error: error.message
+    });
+  }
+};
 
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// };
+
+// ===============================
+// UPDATE VOUCHER
+// ===============================
 exports.updateVoucher = async (req, res) => {
-    try {
-      const voucher = await Voucher.findById(req.params.id);
-  
-      if (!voucher) {
-        return res.status(404).json({ message: "Voucher not found" });
-      }
-  
-      // ✅ Update fields manually (safe way)
-      if (req.body.receiverType !== undefined)
-        voucher.receiverType = req.body.receiverType;
-  
-      if (req.body.receiverName !== undefined)
-        voucher.receiverName = req.body.receiverName;
-  
-      if (req.body.purpose !== undefined)
-        voucher.purpose = req.body.purpose;
-  
-      if (req.body.amount !== undefined)
-        voucher.amount = Number(req.body.amount);
-  
-      if (req.body.paidAmount !== undefined)
-        voucher.paidAmount = Number(req.body.paidAmount);
-  
-      if (req.body.paymentMethod !== undefined)
-        voucher.paymentMethod = req.body.paymentMethod;
-  
-      if (req.body.date !== undefined)
-        voucher.date = new Date(req.body.date);
-  
-      // ✅ VERY IMPORTANT (recalculate)
-      voucher.balanceAmount = voucher.amount - voucher.paidAmount;
-  
-      const updatedVoucher = await voucher.save();
-  
-      res.status(200).json({
-        message: "Voucher updated successfully",
-        voucher: updatedVoucher
-      });
-  
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  };
+  try {
 
-// ===== DELETE =====
+    const { voucherId } = req.params;
+
+    const {
+      receiverType,
+      receiverName,
+      purpose,
+      amount,
+      paymentMethod
+    } = req.body;
+
+    const voucher = await Voucher.findById(voucherId);
+
+    if (!voucher) {
+      return res.status(404).json({
+        message: "Voucher not found"
+      });
+    }
+
+    const purchase = await Purchase.findById(voucher.purchase);
+
+    if (!purchase) {
+      return res.status(404).json({
+        message: "Purchase not found"
+      });
+    }
+
+    const oldAmount = voucher.amount;
+
+    // ===============================
+    // UPDATE PURCHASE PAID AMOUNT
+    // ===============================
+
+    purchase.paidAmount = purchase.paidAmount - oldAmount + amount;
+
+    if (purchase.paidAmount <= 0) {
+      purchase.paidAmount = 0;
+      purchase.paymentStatus = "Unpaid";
+    }
+    else if (purchase.paidAmount < purchase.grandTotal) {
+      purchase.paymentStatus = "Partial";
+    }
+    else {
+      purchase.paymentStatus = "Paid";
+    }
+
+    await purchase.save();
+
+    // ===============================
+    // UPDATE VOUCHER
+    // ===============================
+
+    voucher.receiverType = receiverType || voucher.receiverType;
+    voucher.receiverName = receiverName || voucher.receiverName;
+    voucher.purpose = purpose || voucher.purpose;
+    voucher.amount = amount || voucher.amount;
+    voucher.paymentMethod = paymentMethod || voucher.paymentMethod;
+
+    const updatedVoucher = await voucher.save();
+
+    res.status(200).json({
+      message: "Voucher updated successfully",
+      voucher: updatedVoucher,
+      updatedPurchase: purchase
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating voucher",
+      error: error.message
+    });
+  }
+};
+
+
+// DELETE VOUCHER
 exports.deleteVoucher = async (req, res) => {
   try {
-    const voucher = await Voucher.findById(req.params.id);
+
+    const voucher = await Voucher.findById(req.params.voucherId);
 
     if (!voucher) {
       return res.status(404).json({ message: "Voucher not found" });
     }
 
-    await voucher.deleteOne();
+    const purchase = await Purchase.findById(voucher.purchase);
+
+    // SUBTRACT AMOUNT FROM PURCHASE
+    if (purchase) {
+
+      purchase.paidAmount -= voucher.amount;
+
+      if (purchase.paidAmount <= 0) {
+        purchase.paidAmount = 0;
+        purchase.paymentStatus = "Unpaid";
+      }
+      else if (purchase.paidAmount < purchase.grandTotal) {
+        purchase.paymentStatus = "Partial";
+      }
+      else {
+        purchase.paymentStatus = "Paid";
+      }
+
+      await purchase.save();
+    }
+
+    await Voucher.findByIdAndDelete(req.params.voucherId);
 
     res.status(200).json({
-      message: "Voucher deleted successfully"
+      message: "Voucher Deleted Successfully"
     });
 
   } catch (error) {

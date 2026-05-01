@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-
 const invoiceController = require("../controllers/invoiceController");
+
 
 router.post("/create", invoiceController.createInvoice);
 
@@ -20,6 +20,11 @@ router.get(
 router.get(
   "/get-invoice-by-paymentstatus/:paymentStatus",
   invoiceController.getInvoicesByStatus
+);
+
+router.get(
+  "/get-by-client-and-status/:clientId/:paymentStatus",
+  invoiceController.getInvoicesByClientAndStatus
 );
 
 router.put(

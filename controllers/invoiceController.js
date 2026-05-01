@@ -10,11 +10,13 @@ exports.createInvoice = async (req, res) => {
       date,
       subject,
       notes,
-      products = [],
-      paidAmount = 0
+      products = []
     } = req.body;
 
-    // AUTO GENERATE INVOICE NUMBER
+    // ALWAYS START WITH 0
+    const paidAmount = 0;
+
+    // AUTO INVOICE NUMBER
     const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
 
     let invoiceNumber = "INV0001";
@@ -26,36 +28,36 @@ exports.createInvoice = async (req, res) => {
 
     // PROCESS PRODUCTS
     let totalAmount = 0;
+    let totalGST = 0;
+    let grandTotal = 0;
 
     const productList = products.map((item, index) => {
 
       const amount = item.quantity * item.rate;
+
+      const gstPercent = item.gstPercent || 0;
+      const gstAmount = (amount * gstPercent) / 100;
+
+      const netTotal = amount + gstAmount;
+
       totalAmount += amount;
+      totalGST += gstAmount;
+      grandTotal += netTotal;
 
       return {
         serialNo: index + 1,
         description: item.description,
         quantity: item.quantity,
         rate: item.rate,
-        amount
+        amount,
+        gstPercent,
+        gstAmount,
+        netTotal
       };
     });
 
-    const grandTotal = totalAmount;
-    const paid = Number(paidAmount);
-
-    // PAYMENT STATUS
+    // PAYMENT STATUS (always Unpaid initially)
     let paymentStatus = "Unpaid";
-
-    if (paid > grandTotal) {
-      paymentStatus = "AdvancePayment";
-    } 
-    else if (paid === grandTotal && grandTotal > 0) {
-      paymentStatus = "Paid";
-    } 
-    else if (paid > 0 && paid < grandTotal) {
-      paymentStatus = "Partial";
-    }
 
     const invoice = new Invoice({
       invoiceNumber,
@@ -65,8 +67,9 @@ exports.createInvoice = async (req, res) => {
       notes,
       products: productList,
       totalAmount,
+      totalGST,
       grandTotal,
-      paidAmount: paid,
+      paidAmount, // always 0
       paymentStatus
     });
 
@@ -171,6 +174,29 @@ exports.getInvoicesByStatus = async (req, res) => {
   }
 };
 
+// GET INVOICES BY CLIENT ID AND PAYMENT STATUS
+exports.getInvoicesByClientAndStatus = async (req, res) => {
+  try {
+
+    const { clientId, paymentStatus } = req.params;
+
+    const invoices = await Invoice.find({
+      clientCode: clientId,
+      paymentStatus: paymentStatus
+    }).populate("clientCode", "clientCode name");
+
+    res.status(200).json({
+      count: invoices.length,
+      data: invoices
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching invoices",
+      error: error.message
+    });
+  }
+};
 
 
 // UPDATE INVOICE BASIC DETAILS
@@ -215,24 +241,38 @@ exports.updateInvoiceProducts = async (req, res) => {
     }
 
     let totalAmount = 0;
+    let totalGST = 0;
+    let grandTotal = 0;
 
     const updatedProducts = products.map((item, index) => {
 
       const amount = item.quantity * item.rate;
+
+      const gstPercent = item.gstPercent || 0;
+      const gstAmount = (amount * gstPercent) / 100;
+
+      const netTotal = amount + gstAmount;
+
       totalAmount += amount;
+      totalGST += gstAmount;
+      grandTotal += netTotal;
 
       return {
         serialNo: index + 1,
         description: item.description,
         quantity: item.quantity,
         rate: item.rate,
-        amount
+        amount,
+        gstPercent,
+        gstAmount,
+        netTotal
       };
     });
 
     invoice.products = updatedProducts;
     invoice.totalAmount = totalAmount;
-    invoice.grandTotal = totalAmount;
+    invoice.totalGST = totalGST;
+    invoice.grandTotal = grandTotal;
 
     await invoice.save();
 

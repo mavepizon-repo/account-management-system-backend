@@ -1,48 +1,67 @@
+const mongoose = require("mongoose");
 
-const mongoose = require('mongoose');
-
-const purchaseSchema = new mongoose.Schema({
-  purchaseCode: {
+const purchaseSchema = new mongoose.Schema(
+{
+  sno: {
     type: String,
-    unique: true
+    unique: true,
+    index: true
   },
 
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Vendor',
+    ref: "Vendor",
     required: true
   },
 
-  invoiceNo: {
+  date: {
+    type: Date,
+    required: true
+  },
+
+  invoiceDate: {
+    type: Date,
+    required: true
+  },
+
+  subject: {
     type: String,
     required: true
   },
 
-  purpose: String,
-
-  totalPayment: {
-    type: Number,
-    required: true
-  },
-
-  gstInput: {
-    type: Number,
-    default: 0
-  },
-
-  netTotal: Number,
-
-  paidAmount: {
-    type: Number,
-    default: 0
-  },
-
-  status: {
+  notes: {
     type: String,
-    enum: ['unpaid', 'partial', 'paid'],
-    default: 'unpaid'
+    trim: true,
+    default: ""
+  },
+
+  products: [
+    {
+      serialNo: Number,
+      description: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      rate: { type: Number, required: true },
+
+      amount: Number,
+      gstPercent: { type: Number, default: 0 },
+      gstAmount: { type: Number, default: 0 },
+      netTotal: Number
+    }
+  ],
+
+  totalAmount: { type: Number, default: 0 },
+  totalGST: { type: Number, default: 0 },
+  grandTotal: { type: Number, default: 0 },
+
+  paidAmount: { type: Number, default: 0 },
+
+  paymentStatus: {
+    type: String,
+    enum: ["Unpaid", "Partial", "Paid", "AdvancePayment"],
+    default: "Unpaid"
   }
+},
+{ timestamps: true }
+);
 
-}, { timestamps: true });
-
-module.exports = mongoose.model('Purchase', purchaseSchema);
+module.exports = mongoose.model("Purchase", purchaseSchema);

@@ -1,246 +1,309 @@
-const Purchase = require('../models/Purchase');
-const Vendor = require('../models/Vendor');
+const Purchase = require("../models/Purchase");
 
 
-//  CREATE PURCHASE
+// CREATE PURCHASE
 exports.createPurchase = async (req, res) => {
   try {
 
-    const { vendor, invoiceNo, purpose, totalPayment, gstInput } = req.body;
-
-    // check vendor
-    const vendorExists = await Vendor.findById(vendor);
-    if (!vendorExists) {
-      return res.status(400).json({ message: "Invalid Vendor ID" });
-    }
-
-    // generate purchase code
-    const last = await Purchase.findOne().sort({ createdAt: -1 });
-
-    let purchaseCode = "PC001";
-
-    if (last && last.purchaseCode) {
-      const num = parseInt(last.purchaseCode.substring(2)) + 1;
-      purchaseCode = "PC" + String(num).padStart(3, "0");
-    }
-
-    const netTotal = totalPayment + (gstInput || 0);
-
-    const purchase = new Purchase({
-      purchaseCode,
+    const {
       vendor,
-      invoiceNo,
-      purpose,
-      totalPayment,
-      gstInput,
-      netTotal
+      date,
+      invoiceDate,
+      subject,
+      notes,
+      products = []
+    } = req.body;
+
+    const paidAmount = 0;
+
+    // AUTO SNO GENERATION
+    const lastPurchase = await Purchase.findOne().sort({ createdAt: -1 });
+
+    let sno = "PUR0001";
+
+    if (lastPurchase && lastPurchase.sno) {
+      const num = parseInt(lastPurchase.sno.substring(3)) + 1;
+      sno = "PUR" + String(num).padStart(4, "0");
+    }
+
+    let totalAmount = 0;
+    let totalGST = 0;
+    let grandTotal = 0;
+
+    const productList = products.map((item, index) => {
+
+      const amount = item.quantity * item.rate;
+      const gstPercent = item.gstPercent || 0;
+      const gstAmount = (amount * gstPercent) / 100;
+      const netTotal = amount + gstAmount;
+
+      totalAmount += amount;
+      totalGST += gstAmount;
+      grandTotal += netTotal;
+
+      return {
+        serialNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount,
+        gstPercent,
+        gstAmount,
+        netTotal
+      };
     });
 
-    const saved = await purchase.save();
+    const purchase = new Purchase({
+      sno,
+      vendor,
+      date,
+      invoiceDate,
+      subject,
+      notes,
+      products: productList,
+      totalAmount,
+      totalGST,
+      grandTotal,
+      paidAmount,
+      paymentStatus: "Unpaid"
+    });
 
-    res.status(201).json(saved);
+    const savedPurchase = await purchase.save();
+
+    res.status(201).json({
+      message: "Purchase Created Successfully",
+      data: savedPurchase
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: "Error creating purchase",
+      error: error.message
+    });
   }
 };
 
 
 
-//  GET ALL
-exports.getPurchases = async (req, res) => {
+// GET ALL PURCHASES
+exports.getAllPurchases = async (req, res) => {
   try {
 
-    const data = await Purchase.find()
-      .populate('vendor', 'name vendorCode');
+    const purchases = await Purchase.find()
+      .populate("vendor", "vendorCode name");
 
-    res.json(data);
+    res.status(200).json({
+      count: purchases.length,
+      data: purchases
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 
 
 
-//  GET SINGLE
+// GET PURCHASE BY ID
 exports.getPurchaseById = async (req, res) => {
   try {
 
-    const data = await Purchase.findById(req.params.id)
-      .populate('vendor', 'name vendorCode');
+    const purchase = await Purchase.findById(req.params.purchaseId)
+      .populate("vendor", "vendorCode name");
 
-    if (!data) {
+    if (!purchase) {
       return res.status(404).json({ message: "Purchase not found" });
     }
 
-    res.json(data);
+    res.status(200).json({
+      data: purchase
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 
 
 
-// GET BY VENDOR
-exports.getPurchasesByVendor = async (req, res) => {
+// GET PURCHASES BY VENDOR ID
+exports.getPurchasesByVendorId = async (req, res) => {
   try {
 
-    const data = await Purchase.find({
-      vendor: req.params.vendorId
-    }).populate('vendor', 'name vendorCode');
+    const purchases = await Purchase.find({ vendor: req.params.vendorId })
+      .populate("vendor", "vendorCode name");
 
-    res.json(data);
+    res.status(200).json({
+      count: purchases.length,
+      data: purchases
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: "Error fetching purchases",
+      error: error.message
+    });
   }
 };
 
 
 
-// UPDATE PURCHASE (edit bill)
-exports.updatePurchase = async (req, res) => {
-  try {
-
-    const { totalPayment, gstInput } = req.body;
-
-    let updateData = { ...req.body };
-
-    // recalculate net total if values updated
-    if (totalPayment || gstInput) {
-      const tp = totalPayment || 0;
-      const gst = gstInput || 0;
-      updateData.netTotal = tp + gst;
-    }
-
-    const updated = await Purchase.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-
-    res.json(updated);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-
-//  UPDATE PAYMENT
-exports.updatePayment = async (req, res) => {
-  try {
-
-    const purchase = await Purchase.findById(req.params.id);
-
-    if (!purchase) {
-      return res.status(404).json({ message: "Not found" });
-    }
-
-    const newPaid = purchase.paidAmount + req.body.amount;
-
-    let status = 'unpaid';
-
-    if (newPaid >= purchase.netTotal) {
-      status = 'paid';
-    } else if (newPaid > 0) {
-      status = 'partial';
-    }
-
-    purchase.paidAmount = newPaid;
-    purchase.status = status;
-
-    await purchase.save();
-
-    res.json(purchase);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-
-//  DELETE
-exports.deletePurchase = async (req, res) => {
-  try {
-
-    const data = await Purchase.findByIdAndDelete(req.params.id);
-
-    if (!data) {
-      return res.status(404).json({ message: "Not found" });
-    }
-
-    res.json({ message: "Deleted successfully" });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-//  GET PURCHASES BY STATUS (paid / unpaid / partial)
+// GET PURCHASES BY PAYMENT STATUS
 exports.getPurchasesByStatus = async (req, res) => {
   try {
 
-    const status = req.params.status;
+    const purchases = await Purchase.find({
+      paymentStatus: req.params.paymentStatus
+    }).populate("vendor", "vendorCode name");
 
-    const purchases = await Purchase.find({ status })
-      .populate('vendor', 'name vendorCode');
-
-    res.json({
+    res.status(200).json({
       count: purchases.length,
       data: purchases
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: "Error fetching purchases",
+      error: error.message
+    });
   }
 };
 
-//  GET PURCHASES BY VENDOR + STATUS
-exports.getPurchasesByVendorAndStatus = async (req, res) => {
+
+
+// GET PURCHASES BY STATUS + VENDOR ID
+exports.getPurchasesByStatusAndVendor = async (req, res) => {
   try {
 
-    const { vendorId, status } = req.params;
+    const { paymentStatus, vendorId } = req.params;
 
-    const filter = { vendor: vendorId };
+    const purchases = await Purchase.find({
+      paymentStatus,
+      vendor: vendorId
+    }).populate("vendor", "vendorCode name");
 
-    if (status !== 'all') {
-      filter.status = status;
+    res.status(200).json({
+      count: purchases.length,
+      data: purchases
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error fetching purchases",
+      error: error.message
+    });
+  }
+};
+
+
+
+// UPDATE PURCHASE (BASIC DETAILS)
+exports.updatePurchase = async (req, res) => {
+  try {
+
+    const { date, invoiceDate, subject, notes } = req.body;
+
+    const updatedPurchase = await Purchase.findByIdAndUpdate(
+      req.params.purchaseId,
+      { date, invoiceDate, subject, notes },
+      { new: true }
+    ).populate("vendor", "vendorCode name");
+
+    if (!updatedPurchase) {
+      return res.status(404).json({ message: "Purchase not found" });
     }
 
-    const purchases = await Purchase.find(filter)
-      .populate('vendor', 'name vendorCode');
-
-    res.json({
-      count: purchases.length,
-      data: purchases
+    res.status(200).json({
+      message: "Purchase Updated Successfully",
+      data: updatedPurchase
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 
 
-// GET PURCHASES BY VENDOR (ALL BILLS)
-exports.getPurchasesByVendor = async (req, res) => {
+
+// UPDATE PURCHASE PRODUCTS
+exports.updatePurchaseProducts = async (req, res) => {
   try {
 
-    const { vendorId } = req.params;
+    const { purchaseId } = req.params;
+    const { products } = req.body;
 
-    const purchases = await Purchase.find({ vendor: vendorId })
-      .populate('vendor', 'name vendorCode');
+    const purchase = await Purchase.findById(purchaseId);
 
-    res.json({
-      count: purchases.length,
-      data: purchases
+    if (!purchase) {
+      return res.status(404).json({ message: "Purchase not found" });
+    }
+
+    let totalAmount = 0;
+    let totalGST = 0;
+    let grandTotal = 0;
+
+    const updatedProducts = products.map((item, index) => {
+
+      const amount = item.quantity * item.rate;
+      const gstPercent = item.gstPercent || 0;
+      const gstAmount = (amount * gstPercent) / 100;
+      const netTotal = amount + gstAmount;
+
+      totalAmount += amount;
+      totalGST += gstAmount;
+      grandTotal += netTotal;
+
+      return {
+        serialNo: index + 1,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount,
+        gstPercent,
+        gstAmount,
+        netTotal
+      };
+    });
+
+    purchase.products = updatedProducts;
+    purchase.totalAmount = totalAmount;
+    purchase.totalGST = totalGST;
+    purchase.grandTotal = grandTotal;
+
+    await purchase.save();
+
+    res.status(200).json({
+      message: "Products updated successfully",
+      data: purchase
     });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: "Error updating products",
+      error: error.message
+    });
+  }
+};
+
+
+
+// DELETE PURCHASE
+exports.deletePurchase = async (req, res) => {
+  try {
+
+    const purchase = await Purchase.findById(req.params.purchaseId);
+
+    if (!purchase) {
+      return res.status(404).json({ message: "Purchase not found" });
+    }
+
+    await Purchase.findByIdAndDelete(req.params.purchaseId);
+
+    res.status(200).json({
+      message: "Purchase Deleted Successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
