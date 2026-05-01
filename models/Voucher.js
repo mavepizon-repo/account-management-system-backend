@@ -8,26 +8,33 @@ const voucherSchema = new mongoose.Schema({
     required: true
   },
 
+  receiverType: {
+    type: String,
+    enum: ["Vendor", "Subcontract"],
+    required: true
+  },
+
+  receiver: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    refPath: "receiverType"
+  },
+
   purchase: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Purchase",
-    required: true
+    default: null
+  },
+
+  workSubcontract: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "WorkSubcontract",
+    default: null
   },
 
   date: {
     type: Date,
     default: Date.now
-  },
-
-  receiverType: {
-    type: String,
-    enum: ["vendor", "subcontractor"],
-    required: true
-  },
-
-  receiverName: {
-    type: String,
-    required: true
   },
 
   purpose: {
@@ -44,6 +51,11 @@ const voucherSchema = new mongoose.Schema({
     type: String,
     enum: ["cash", "online"],
     default: "cash"
+  },
+
+  notes: {
+    type: String,
+    default: ""
   },
 
   pdfUrl: {

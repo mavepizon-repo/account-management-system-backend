@@ -9,6 +9,7 @@ const path = require("path");
 
 exports.createReceipt = async (req, res) => {
   try {
+
     const { invoiceId, amountPaid, description } = req.body;
 
     if (!amountPaid || amountPaid <= 0) {
@@ -23,37 +24,58 @@ exports.createReceipt = async (req, res) => {
 
     const remainingAmount = invoice.grandTotal - invoice.paidAmount;
 
+    let advanceAmount = 0;
+    let newPaidAmount = invoice.paidAmount;
+
+    // ===============================
+    // ADVANCE PAYMENT LOGIC
+    // ===============================
+
     if (amountPaid > remainingAmount) {
-      return res.status(400).json({
-        message: "Payment exceeds remaining balance",
-        remainingAmount
-      });
+
+      advanceAmount = amountPaid - remainingAmount;
+
+      newPaidAmount = invoice.grandTotal; // invoice fully paid
+
+    } else {
+
+      newPaidAmount = invoice.paidAmount + amountPaid;
+
     }
 
-    const newPaidAmount = invoice.paidAmount + amountPaid;
+    // ===============================
+    // PAYMENT STATUS
+    // ===============================
 
     let paymentStatus = "Unpaid";
+
     if (newPaidAmount > 0 && newPaidAmount < invoice.grandTotal) {
       paymentStatus = "Partial";
-    } else if (newPaidAmount === invoice.grandTotal) {
+    }
+    else if (newPaidAmount >= invoice.grandTotal) {
       paymentStatus = "Paid";
     }
 
     invoice.paidAmount = newPaidAmount;
     invoice.paymentStatus = paymentStatus;
+
     await invoice.save();
 
     // ===== RECEIPT NUMBER =====
+
     const lastReceipt = await Receipt.findOne().sort({ createdAt: -1 });
 
     let receiptNumber = "RC0001";
+
     if (lastReceipt) {
       const num = parseInt(lastReceipt.receiptNumber.substring(2)) + 1;
       receiptNumber = "RC" + String(num).padStart(4, "0");
     }
 
     // ===== TEMP PDF =====
+
     const uploadDir = path.join(__dirname, "../uploads");
+
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -61,11 +83,13 @@ exports.createReceipt = async (req, res) => {
     const pdfPath = path.join(uploadDir, `${receiptNumber}.pdf`);
 
     const doc = new PDFDocument({ margin: 50 });
+
     const stream = fs.createWriteStream(pdfPath);
+
     doc.pipe(stream);
 
     // ===============================
-    // ✅ HEADER (FIXED - NO OVERLAP)
+    // HEADER
     // ===============================
 
     const startX = 50;
@@ -106,11 +130,13 @@ exports.createReceipt = async (req, res) => {
     );
 
     const lineY = Math.max(doc.y + 10, startY + 100);
+
     doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
 
     // ===============================
     // RECEIPT TITLE
     // ===============================
+
     doc
       .fontSize(18)
       .font("Helvetica-Bold")
@@ -119,6 +145,7 @@ exports.createReceipt = async (req, res) => {
     // ===============================
     // INFO BOX
     // ===============================
+
     const boxTop = lineY + 60;
 
     doc.rect(50, boxTop, 500, 120).stroke();
@@ -142,6 +169,7 @@ exports.createReceipt = async (req, res) => {
     // ===============================
     // TABLE
     // ===============================
+
     const tableTop = boxTop + 150;
 
     doc
@@ -166,11 +194,16 @@ exports.createReceipt = async (req, res) => {
     row("Total Paid Till Now", newPaidAmount);
     row("Remaining Balance", invoice.grandTotal - newPaidAmount);
 
+    if (advanceAmount > 0) {
+      row("Advance Amount", advanceAmount);
+    }
+
     doc.moveTo(50, y).lineTo(550, y).stroke();
 
     // ===============================
     // FOOTER
     // ===============================
+
     doc
       .fontSize(11)
       .text("Thank you for your payment!", 50, y + 40, {
@@ -190,8 +223,11 @@ exports.createReceipt = async (req, res) => {
     // ===============================
     // CLOUDINARY UPLOAD
     // ===============================
+
     stream.on("finish", async () => {
+
       try {
+
         const result = await cloudinary.uploader.upload(pdfPath, {
           resource_type: "raw",
           folder: "receipts"
@@ -214,15 +250,19 @@ exports.createReceipt = async (req, res) => {
         res.status(201).json({
           message: "Receipt generated successfully",
           receipt: savedReceipt,
-          updatedInvoice: invoice
+          updatedInvoice: invoice,
+          advanceAmount
         });
 
       } catch (err) {
+
         res.status(500).json({
           error: "Cloudinary upload failed",
           details: err.message
         });
+
       }
+
     });
 
   } catch (error) {

@@ -19,6 +19,9 @@ router.get("/get/:voucherId", voucherController.getVoucherById);
 // GET VOUCHERS BY PURCHASE ID
 router.get("/get-by-purchase/:purchaseId", voucherController.getVouchersByPurchaseId);
 
+// GET VOUCHERS BY SUBCONTRACT ID
+router.get("/get-by-worksubcontract/:workSubcontractId", voucherController.getVouchersByWorkSubcontractId);
+
 // UPDATE VOUCHER
 router.put("/update/:voucherId", voucherController.updateVoucher);
 
