@@ -1,4 +1,4 @@
-const Invoice = require("../models/Invoice");
+const Invoice = require("../../models/client/Invoice");
 
 
 // CREATE INVOICE

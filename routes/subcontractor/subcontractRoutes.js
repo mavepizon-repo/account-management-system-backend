@@ -13,7 +13,7 @@
 const express = require("express");
 const router = express.Router();
 
-const subcontractController = require("../controllers/subcontractController");
+const subcontractController = require("../../controllers/subcontractor/subcontractController");
 
 router.post("/create", subcontractController.createSubcontract);
 router.get("/getall", subcontractController.getAllSubcontracts);

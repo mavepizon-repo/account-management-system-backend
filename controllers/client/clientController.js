@@ -1,4 +1,4 @@
-const Client = require("../models/Client");
+const Client = require("../../models/client/Client");
 
 
 // CREATE CLIENT

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const receiptController = require("../controllers/receiptController");
+const receiptController = require("../../controllers/client/receiptController");
 
 // CREATE RECEIPT + GENERATE PDF
 router.post("/create", receiptController.createReceipt);

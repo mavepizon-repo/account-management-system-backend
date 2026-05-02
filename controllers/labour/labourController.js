@@ -1,4 +1,4 @@
-const Labour = require("../models/Labour");
+const Labour = require("../../models/labour/Labour");
 
 
 // CREATE labour

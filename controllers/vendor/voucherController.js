@@ -1,8 +1,8 @@
-const Voucher = require("../models/Voucher");
-const Purchase = require("../models/Purchase");
-const WorkSubcontract = require("../models/WorkSubcontract");
+const Voucher = require("../../models/vendor/Voucher");
+const Purchase = require("../../models/vendor/Purchase");
+const WorkSubcontract = require("../../models/subcontractor/WorkSubcontract");
 
-const cloudinary = require("../config/cloudinary");
+const cloudinary = require("../../config/cloudinary");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");

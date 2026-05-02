@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getVendorNameAndCode } = require('../controllers/vendorController');
+const { getVendorNameAndCode } = require('../../controllers/vendor/vendorController');
 
 const {
   createVendor,
@@ -8,7 +8,7 @@ const {
   getVendorById,
   updateVendor,
   deleteVendor
-} = require('../controllers/vendorController');
+} = require('../../controllers/vendor/vendorController');
 
 router.post('/add', createVendor);
 router.get('/getall', getVendors);

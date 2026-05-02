@@ -1,4 +1,4 @@
-const WorkSubcontract = require("../models/WorkSubcontract");
+const WorkSubcontract = require("../../models/subcontractor/WorkSubcontract");
 
 exports.createWork = async (req, res) => {
   try {

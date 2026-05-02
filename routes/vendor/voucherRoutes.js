@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const voucherController = require("../controllers/voucherController");
+const voucherController = require("../../controllers/vendor/voucherController");
 
 
 // CREATE VOUCHER

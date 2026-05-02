@@ -1,4 +1,4 @@
-const Purchase = require("../models/Purchase");
+const Purchase = require("../../models/vendor/Purchase");
 
 
 // CREATE PURCHASE

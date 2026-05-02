@@ -1,4 +1,4 @@
-const Subcontract = require("../models/Subcontract");
+const Subcontract = require("../../models/subcontractor/Subcontract");
 
 
 // ✅ CREATE Subcontract

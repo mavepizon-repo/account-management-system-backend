@@ -10,7 +10,7 @@ const {
   deleteAttendance,
   getLabourMonthlyDetails,
   getMonthlyReportExcel
-} = require("../controllers/attendanceController");
+} = require("../../controllers/labour/attendanceController");
 
 
 // ========================

@@ -11,7 +11,7 @@ const {
   updatePurchase,
   updatePurchaseProducts,
   deletePurchase
-} = require("../controllers/purchaseController");
+} = require("../../controllers/vendor/purchaseController");
 
 
 // CREATE

@@ -2,7 +2,7 @@ const express = require("express");
 
 const router = express.Router();
 
-const clientController = require("../controllers/clientController");
+const clientController = require("../../controllers/client/clientController");
 
 
 router.post("/create", clientController.createClient);

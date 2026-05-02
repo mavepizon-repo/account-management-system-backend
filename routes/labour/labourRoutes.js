@@ -8,7 +8,7 @@ const {
   updatelabour,
   deletelabour,
   getlabourNameAndId
-} = require("../controllers/labourController");
+} = require("../../controllers/labour/labourController");
 
 
 // CREATE

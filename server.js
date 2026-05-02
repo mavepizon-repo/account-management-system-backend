@@ -4,21 +4,21 @@ const express = require("express");
 const cors = require("cors");
 
 const connectDB = require("./config/db");
-const clientRoutes = require("./routes/clientRoutes");
-const invoiceRoutes = require("./routes/invoiceRoutes");
-const receiptRoutes = require("./routes/receiptRoutes");
-const vendorRoutes = require('./routes/vendorRoutes');
-const purchaseRoutes = require('./routes/purchaseRoutes');
-const subcontractRoutes = require("./routes/subcontractRoutes");
-const workSubcontractRoutes = require("./routes/workSubcontractRoutes");
+const clientRoutes = require("./routes/client/clientRoutes");
+const invoiceRoutes = require("./routes/client/invoiceRoutes");
+const receiptRoutes = require("./routes/client/receiptRoutes");
+const vendorRoutes = require('./routes/vendor/vendorRoutes');
+const purchaseRoutes = require('./routes/vendor/purchaseRoutes');
+const subcontractRoutes = require("./routes/subcontractor/subcontractRoutes");
+const workSubcontractRoutes = require("./routes/subcontractor/workSubcontractRoutes");
 
 const app = express();
 
-const voucherRoutes = require("./routes/voucherRoutes");
+const voucherRoutes = require("./routes/vendor/voucherRoutes");
 
-const labourRoutes = require("./routes/labourRoutes");
+const labourRoutes = require("./routes/labour/labourRoutes");
 
-const attendanceRoutes = require("./routes/attendanceRoutes");
+const attendanceRoutes = require("./routes/labour/attendanceRoutes");
 
 // connect database
 connectDB();
@@ -47,6 +47,8 @@ app.use("/api/vouchers", voucherRoutes);
 app.use("/api/labours", labourRoutes);
 
 app.use("/api/attendance", attendanceRoutes);
+
+app.use("/api/advancePayment", advanceRoutes);
 
 const PORT = process.env.PORT || 8080;
 

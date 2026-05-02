@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const workController = require("../controllers/WorkSubcontractController");
+const workController = require("../../controllers/subcontractor/WorkSubcontractController");
 
 router.post("/create", workController.createWork);
 router.get("/getall", workController.getAllWorks);

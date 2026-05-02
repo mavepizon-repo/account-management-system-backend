@@ -1,5 +1,5 @@
-const Attendance = require("../models/attendance");
-const Labour = require("../models/Labour");
+const Attendance = require("../../models/labour/Attendance");
+const Labour = require("../../models/labour/Labour");
 const ExcelJS = require("exceljs");
 
 
