@@ -1,132 +1,127 @@
 const Labour = require("../models/Labour");
 
 
-// ===== CREATE LABOUR =====
-exports.createLabour = async (req, res) => {
+// CREATE labour
+exports.createlabour = async (req, res) => {
   try {
-    const {
-      name,
-      workType,
-      site,
-      dailyWage,
-      daysWorked = 0,
-      advance = 0
-    } = req.body;
 
-    if (!name || !dailyWage) {
-      return res.status(400).json({
-        message: "Name and Daily Wage are required"
-      });
-    }
-
-    // Generate Labour ID
-    const last = await Labour.findOne().sort({ createdAt: -1 });
+    const lastLabour = await Labour.findOne().sort({ createdAt: -1 });
 
     let labourId = "LB001";
 
-    if (last && last.labourId) {
-      const num = parseInt(last.labourId.substring(2)) + 1;
+    if (lastLabour && lastLabour.labourId) {
+      const num = parseInt(lastLabour.labourId.substring(2)) + 1;
       labourId = "LB" + String(num).padStart(3, "0");
     }
 
-    // Calculation
-    const totalSalary = dailyWage * daysWorked;
-    const balance = totalSalary - advance;
-
+    // ✅ Now use it AFTER declaration
     const labour = new Labour({
-      labourId,
-      name,
-      workType,
-      site,
-      dailyWage,
-      daysWorked,
-      advance,
-      totalSalary,
-      balance
+      labourId: labourId,
+      name: req.body.name,
+      phone: req.body.phone,
+      address: req.body.address,
+      workType: req.body.workType,
+      dailyWage: req.body.dailyWage,
+      description: req.body.description
     });
 
-    const saved = await labour.save();
+    const savedLabour = await labour.save();
 
-    res.status(201).json({
-      message: "Labour created",
-      labour: saved
-    });
+    res.status(201).json(savedLabour);
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ===== GET ALL =====
-exports.getAllLabours = async (req, res) => {
+
+// GET ALL labourS
+exports.getlabours = async (req, res) => {
   try {
+
     const labours = await Labour.find();
 
-    res.json({
-      count: labours.length,
-      data: labours
-    });
+    res.json(labours);
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ===== GET BY ID =====
-exports.getLabourById = async (req, res) => {
+
+// GET labour BY ID
+exports.getlabourById = async (req, res) => {
   try {
+
     const labour = await Labour.findById(req.params.id);
 
     if (!labour) {
-      return res.status(404).json({ message: "Not found" });
+      return res.status(404).json({ message: "labour not found" });
     }
 
     res.json(labour);
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ===== UPDATE =====
-exports.updateLabour = async (req, res) => {
-  try {
-    const labour = await Labour.findById(req.params.id);
 
-    if (!labour) {
-      return res.status(404).json({ message: "Not found" });
+// UPDATE labour
+exports.updatelabour = async (req, res) => {
+  try {
+
+    const updatedlabour = await Labour.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedlabour) {
+      return res.status(404).json({ message: "labour not found" });
     }
 
-    // update fields
-    Object.assign(labour, req.body);
-
-    // recalculate
-    labour.totalSalary = labour.dailyWage * labour.daysWorked;
-    labour.balance = labour.totalSalary - labour.advance;
-
-    const updated = await labour.save();
-
-    res.json({
-      message: "Updated successfully",
-      labour: updated
-    });
+    res.json(updatedlabour);
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
 
-// ===== DELETE =====
-exports.deleteLabour = async (req, res) => {
-  try {
-    await Labour.findByIdAndDelete(req.params.id);
 
-    res.json({
-      message: "Deleted successfully"
+// DELETE labour
+exports.deletelabour = async (req, res) => {
+  try {
+
+    const labour = await Labour.findByIdAndDelete(req.params.id);
+
+    if (!labour) {
+      return res.status(404).json({ message: "labour not found" });
+    }
+
+    res.json({ message: "labour deleted successfully" });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+// GET labour FOR DROPDOWN
+exports.getlabourNameAndId = async (req, res) => {
+  try {
+
+    const labours = await Labour.find()
+      .select("labourId name");
+
+    res.status(200).json({
+      count: labours.length,
+      data: labours
     });
 
   } catch (error) {

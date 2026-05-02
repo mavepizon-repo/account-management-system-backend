@@ -1,21 +1,32 @@
 const express = require("express");
 const router = express.Router();
 
-const labourController = require("../controllers/labourController");
+const {
+  createlabour,
+  getlabours,
+  getlabourById,
+  updatelabour,
+  deletelabour,
+  getlabourNameAndId
+} = require("../controllers/labourController");
+
 
 // CREATE
-router.post("/add", labourController.createLabour);
+router.post("/add", createlabour);
 
 // GET ALL
-router.get("/getall", labourController.getAllLabours);
+router.get("/getall", getlabours);
+
+// GET DROPDOWN
+router.get("/dropdown", getlabourNameAndId);
 
 // GET BY ID
-router.get("/get/:id", labourController.getLabourById);
+router.get("/get/:id", getlabourById);
 
 // UPDATE
-router.put("/edit/:id", labourController.updateLabour);
+router.put("/update/:id", updatelabour);
 
 // DELETE
-router.delete("/delete/:id", labourController.deleteLabour);
+router.delete("/delete/:id", deletelabour);
 
 module.exports = router;

@@ -362,39 +362,52 @@ exports.getReceiptById = async (req, res) => {
 exports.updateReceipt = async (req, res) => {
   try {
 
-    const receipt = await Receipt.findById(req.params.id);
+    const receipt = await Receipt.findById(req.params.id).populate({
+      path: "invoice",
+      populate: { path: "client" }
+    });
 
     if (!receipt) {
       return res.status(404).json({ message: "Receipt not found" });
     }
 
-    const invoice = await Invoice.findById(receipt.invoice);
+    const invoice = receipt.invoice;
 
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
+    // ===============================
+    // UPDATE AMOUNT
+    // ===============================
+
     if (req.body.amountPaid !== undefined) {
 
-    const difference = Number(req.body.amountPaid) - receipt.amountPaid;
+      const newAmount = Number(req.body.amountPaid);
 
-    invoice.paidAmount += difference;
+      const difference = newAmount - receipt.amountPaid;
 
-    receipt.amountPaid = Number(req.body.amountPaid);
+      invoice.paidAmount += difference;
 
-    // update payment status
-    if (invoice.paidAmount === 0) {
-      invoice.paymentStatus = "Unpaid";
-    } 
-    else if (invoice.paidAmount < invoice.grandTotal) {
-      invoice.paymentStatus = "Partial";
-    } 
-    else {
-      invoice.paymentStatus = "Paid";
+      receipt.amountPaid = newAmount;
+
+      // Payment status
+      if (invoice.paidAmount === 0) {
+        invoice.paymentStatus = "Unpaid";
+      }
+      else if (invoice.paidAmount < invoice.grandTotal) {
+        invoice.paymentStatus = "Partial";
+      }
+      else {
+        invoice.paymentStatus = "Paid";
+      }
+
+      await invoice.save();
     }
 
-    await invoice.save();
-  }
+    // ===============================
+    // UPDATE OTHER FIELDS
+    // ===============================
 
     if (req.body.paymentDate !== undefined) {
       receipt.paymentDate = new Date(req.body.paymentDate);
@@ -404,11 +417,192 @@ exports.updateReceipt = async (req, res) => {
       receipt.description = req.body.description;
     }
 
-    const updatedReceipt = await receipt.save();
+    const receiptNumber = receipt.receiptNumber;
 
-    res.status(200).json({
-      message: "Receipt updated successfully",
-      receipt: updatedReceipt
+    await receipt.save();
+
+    // ===============================
+    // TEMP PDF
+    // ===============================
+
+    const uploadDir = path.join(__dirname, "../uploads");
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const pdfPath = path.join(uploadDir, `${receiptNumber}.pdf`);
+
+    const doc = new PDFDocument({ margin: 50 });
+
+    const stream = fs.createWriteStream(pdfPath);
+
+    doc.pipe(stream);
+
+    // ===============================
+    // HEADER
+    // ===============================
+
+    const startX = 50;
+    const startY = 50;
+
+    const logoPath = path.join(__dirname, "../assets/logo.jpeg");
+
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, startX, startY, { width: 110 });
+    }
+
+    const rightX = 180;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .text("DESIGN ART", rightX, startY);
+
+    doc.moveDown(0.5);
+
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .text(
+        "5-6, Indria Nagar, PM Samy Colony, Ratinapuri, Gandhipuram, Coimbatore - 641012",
+        rightX,
+        doc.y,
+        { width: 350 }
+      );
+
+    doc.moveDown(0.3);
+
+    doc.text(
+      "Phone: +91 9677731326 | GST: 33BNCPP2332Q1ZT",
+      rightX,
+      doc.y,
+      { width: 350 }
+    );
+
+    const lineY = Math.max(doc.y + 10, startY + 100);
+
+    doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
+
+    // ===============================
+    // TITLE
+    // ===============================
+
+    doc
+      .fontSize(18)
+      .font("Helvetica-Bold")
+      .text("PAYMENT RECEIPT", 0, lineY + 20, { align: "center" });
+
+    // ===============================
+    // INFO BOX
+    // ===============================
+
+    const boxTop = lineY + 60;
+
+    doc.rect(50, boxTop, 500, 120).stroke();
+
+    doc.fontSize(11).font("Helvetica");
+
+    let infoY = boxTop + 15;
+
+    const infoRow = (label, value) => {
+      doc.text(label, 70, infoY);
+      doc.text(value || "-", 200, infoY);
+      infoY += 20;
+    };
+
+    infoRow("Receipt Number:", receiptNumber);
+    infoRow("Invoice Number:", invoice.invoiceNumber || invoice._id.toString());
+    infoRow("Date:", new Date(receipt.paymentDate).toLocaleDateString());
+    infoRow("Client Name:", invoice.client.name);
+    infoRow("Description:", receipt.description || "Payment received");
+
+    // ===============================
+    // TABLE
+    // ===============================
+
+    const tableTop = boxTop + 150;
+
+    doc
+      .font("Helvetica-Bold")
+      .text("Description", 70, tableTop)
+      .text("Amount (Rs.)", 400, tableTop, { align: "right" });
+
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    doc.font("Helvetica");
+
+    let y = tableTop + 35;
+
+    const row = (label, value) => {
+      doc.text(label, 70, y);
+      doc.text(`Rs. ${Number(value).toFixed(2)}`, 400, y, { align: "right" });
+      y += 25;
+    };
+
+    row("Invoice Total", invoice.grandTotal);
+    row("Amount Paid", receipt.amountPaid);
+    row("Total Paid Till Now", invoice.paidAmount);
+    row("Remaining Balance", invoice.grandTotal - invoice.paidAmount);
+
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+
+    // ===============================
+    // FOOTER
+    // ===============================
+
+    doc
+      .fontSize(11)
+      .text("Thank you for your payment!", 50, y + 40, {
+        align: "center",
+        width: 500
+      });
+
+    doc
+      .fontSize(9)
+      .text("This is a system generated receipt.", 50, y + 60, {
+        align: "center",
+        width: 500
+      });
+
+    doc.end();
+
+    // ===============================
+    // CLOUDINARY UPLOAD
+    // ===============================
+
+    stream.on("finish", async () => {
+
+      try {
+
+        const result = await cloudinary.uploader.upload(pdfPath, {
+          resource_type: "raw",
+          folder: "receipts",
+          public_id: receiptNumber,
+          overwrite: true
+        });
+
+        receipt.receiptPdf = result.secure_url;
+
+        await receipt.save();
+
+        fs.unlinkSync(pdfPath);
+
+        res.status(200).json({
+          message: "Receipt updated successfully",
+          receipt,
+          invoice
+        });
+
+      } catch (err) {
+
+        res.status(500).json({
+          error: "Cloudinary upload failed",
+          details: err.message
+        });
+
+      }
+
     });
 
   } catch (error) {

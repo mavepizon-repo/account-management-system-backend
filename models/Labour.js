@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
-const labourSchema = new mongoose.Schema({
+const labourSchema = new mongoose.Schema(
+{
   labourId: {
     type: String,
     unique: true
@@ -11,12 +12,19 @@ const labourSchema = new mongoose.Schema({
     required: true
   },
 
-  workType: {
-    type: String
+  phone: {
+    type: String,
+    required: true
   },
 
-  site: {
-    type: String
+  address: {
+    type: String,
+    required: true
+  },
+
+  workType: {
+    type: String,
+    required: true
   },
 
   dailyWage: {
@@ -24,26 +32,12 @@ const labourSchema = new mongoose.Schema({
     required: true
   },
 
-  daysWorked: {
-    type: Number,
-    default: 0
-  },
-
-  advance: {
-    type: Number,
-    default: 0
-  },
-
-  totalSalary: {
-    type: Number,
-    default: 0
-  },
-
-  balance: {
-    type: Number,
-    default: 0
+  description: {
+    type: String,
+    default: ""
   }
+},
+{ timestamps: true }
+);
 
-}, { timestamps: true });
-
-module.exports = mongoose.model("Labour", labourSchema);
+module.exports = mongoose.model("labour", labourSchema);
