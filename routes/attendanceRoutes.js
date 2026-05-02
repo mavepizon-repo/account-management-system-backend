@@ -1,48 +1,70 @@
-// const express = require("express");
-// const router = express.Router();
-
-// const {
-//   addAttendance,
-//   monthlyReport
-// } = require("../controllers/attendanceController");
-
-// router.post("/add", addAttendance);
-
-// router.get("/all", getAllAttendance);
-// router.get("/report/:month", monthlyReport); // 👈 first
-// router.get("/:id", getAttendanceById);
-
-// router.put("/update/:id", updateAttendance);
-
-// router.delete("/delete/:id", deleteAttendance);
-
-// module.exports = router;
 const express = require("express");
 const router = express.Router();
 
 const {
-  addAttendance,
-  monthlyReport,
-  labourMonthlyReport, 
+  createAttendance,
   getAllAttendance,
-  getAttendanceById,
+  getAttendanceByDate,
+  getAttendanceByLabour,
   updateAttendance,
-  deleteAttendance
+  deleteAttendance,
+  getLabourMonthlyDetails,
+  getMonthlyReportExcel
 } = require("../controllers/attendanceController");
 
-router.post("/add", addAttendance);
 
-router.get("/all", getAllAttendance);
+// ========================
+// CREATE ATTENDANCE
+// ========================
+router.post("/add", createAttendance);
 
-// ⚠️ order important
-router.get("/report/:month", monthlyReport);
-router.get("/:id", getAttendanceById);
 
+// ========================
+// GET ALL ATTENDANCE
+// ========================
+router.get("/getall", getAllAttendance);
+
+
+// ========================
+// GET BY DATE
+// ========================
+router.get("/get-by-date/:date", getAttendanceByDate);
+
+
+// ========================
+// GET BY LABOUR ID (LB001)
+// ========================
+router.get("/get-by-labourId/:labourId", getAttendanceByLabour);
+
+
+// ========================
+// UPDATE ATTENDANCE
+// ========================
 router.put("/update/:id", updateAttendance);
 
+
+// ========================
+// DELETE ATTENDANCE
+// ========================
 router.delete("/delete/:id", deleteAttendance);
 
-router.get("/report/:labourId/:month", labourMonthlyReport);
-router.get("/report/:month", monthlyReport); // 👈 next
+
+// ========================
+// MONTHLY DETAILS (SINGLE LABOUR)
+// ========================
+router.get(
+  "/monthly/:labourId/:year/:month",
+  getLabourMonthlyDetails
+);
+
+
+// ========================
+// MONTHLY EXCEL REPORT (ALL LABOURS)
+// ========================
+router.get(
+  "/report-excel/:month/:year",
+  getMonthlyReportExcel
+);
+
 
 module.exports = router;

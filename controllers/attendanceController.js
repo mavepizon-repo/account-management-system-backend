@@ -1,341 +1,185 @@
-// const Attendance = require("../models/Attendance");
-// const moment = require("moment");
-// const { generatePDF } = require("../utils/pdfGenerator");
+const Attendance = require("../models/attendance");
+const Labour = require("../models/Labour");
+const ExcelJS = require("exceljs");
 
-// // Dummy labour master (later DB la move pannalam)
-// const labourData = {
-//   L001: { name: "Ravi", workType: "Plumbing" },
-//   L002: { name: "Kumar", workType: "Carpenter" }
-// };
 
-// // ➕ ADD ATTENDANCE
-// exports.addAttendance = async (req, res) => {
-//   try {
-//     const { labourId, date, startTime, endTime } = req.body;
+// 🔥 Calculate working + overtime
+const calculateHours = (start, end) => {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
 
-//     const labour = labourData[labourId];
-//     if (!labour) return res.status(404).json({ message: "Labour not found" });
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
 
-//     let start = moment(startTime, "HH:mm");
-//     let end = moment(endTime, "HH:mm");
+  let diff = (endMin - startMin) / 60;
 
-//     let hours = moment.duration(end.diff(start)).asHours();
-//     if (hours < 0) hours += 24;
+  if (diff < 0) diff = 0;
 
-//     let overtime = hours > 8 ? hours - 8 : 0;
+  const totalHours = Number(diff.toFixed(2));
+  const overtimeHours =
+    totalHours > 8 ? Number((totalHours - 8).toFixed(2)) : 0;
 
-//     const attendance = new Attendance({
-//       labourId,
-//       date,
-//       name: labour.name,
-//       workType: labour.workType,
-//       startTime,
-//       endTime,
-//       totalHours: hours,
-//       overtime
-//     });
+  return { totalHours, overtimeHours };
+};
 
-//     await attendance.save();
 
-//     res.json({
-//       message: "Attendance saved successfully",
-//       attendance
-//     });
 
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-// // 📄 MONTHLY PDF
-// exports.monthlyReport = async (req, res) => {
-//   try {
-//     const { month } = req.params;
-
-//     const data = await Attendance.find({
-//       date: { $regex: `^${month}` }
-//     });
-
-//     generatePDF(data, month, res);
-
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-// ==================================
-
-// const Attendance = require("../models/Attendance");
-// const moment = require("moment");
-// const { generatePDF } = require("../utils/pdfGenerator");
-
-// // Dummy labour master (later DB la move pannalam)
-// const labourData = {
-//   L001: { name: "Ravi", workType: "Plumbing" },
-//   L002: { name: "Kumar", workType: "Carpenter" }
-// };
-
-
-
-// // ➕ ADD ATTENDANCE
-// exports.addAttendance = async (req, res) => {
-//   try {
-//     const { labourId, date, startTime, endTime } = req.body;
-
-//     const labour = labourData[labourId];
-//     if (!labour) {
-//       return res.status(404).json({ message: "Labour not found" });
-//     }
-
-//     // ❗ Duplicate check
-//     const existing = await Attendance.findOne({ labourId, date });
-//     if (existing) {
-//       return res.status(400).json({ message: "Attendance already marked" });
-//     }
-
-//     let start = moment(startTime, "HH:mm");
-//     let end = moment(endTime, "HH:mm");
-
-//     let hours = moment.duration(end.diff(start)).asHours();
-//     if (hours < 0) hours += 24;
-
-//     let overtime = hours > 8 ? hours - 8 : 0;
-
-//     const attendance = new Attendance({
-//       labourId,
-//       date,
-//       name: labour.name,
-//       workType: labour.workType,
-//       startTime,
-//       endTime,
-//       totalHours: hours,
-//       overtime
-//     });
-
-//     await attendance.save();
-
-//     res.json({
-//       message: "Attendance saved successfully",
-//       attendance
-//     });
-
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-
-
-// // 📌 GET ALL
-// exports.getAllAttendance = async (req, res) => {
-//   try {
-//     const data = await Attendance.find().sort({ date: -1 });
-//     res.json(data);
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-
-
-// // 📌 GET BY ID
-// exports.getAttendanceById = async (req, res) => {
-//   try {
-//     const data = await Attendance.findById(req.params.id);
-
-//     if (!data) {
-//       return res.status(404).json({ message: "Attendance not found" });
-//     }
-
-//     res.json(data);
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-
-
-// // ✏️ UPDATE (with recalculation)
-// exports.updateAttendance = async (req, res) => {
-//   try {
-//     const { startTime, endTime } = req.body;
-
-//     let updateData = { ...req.body };
-
-//     // 👉 If time updated → recalculate
-//     if (startTime && endTime) {
-//       let start = moment(startTime, "HH:mm");
-//       let end = moment(endTime, "HH:mm");
-
-//       let hours = moment.duration(end.diff(start)).asHours();
-//       if (hours < 0) hours += 24;
-
-//       let overtime = hours > 8 ? hours - 8 : 0;
-
-//       updateData.totalHours = hours;
-//       updateData.overtime = overtime;
-//     }
-
-//     const updated = await Attendance.findByIdAndUpdate(
-//       req.params.id,
-//       updateData,
-//       { new: true }
-//     );
-
-//     if (!updated) {
-//       return res.status(404).json({ message: "Attendance not found" });
-//     }
-
-//     res.json(updated);
-
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-
-
-// // 🗑️ DELETE
-// exports.deleteAttendance = async (req, res) => {
-//   try {
-//     const deleted = await Attendance.findByIdAndDelete(req.params.id);
-
-//     if (!deleted) {
-//       return res.status(404).json({ message: "Attendance not found" });
-//     }
-
-//     res.json({ message: "Attendance deleted successfully" });
-
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-
-
-// // 📄 MONTHLY PDF
-// exports.monthlyReport = async (req, res) => {
-//   try {
-//     const { month } = req.params;
-
-//     const data = await Attendance.find({
-//       date: { $regex: `^${month}` }
-//     });
-
-//     generatePDF(data, month, res);
-
-//   } catch (err) {
-//     res.status(500).json(err);
-//   }
-// };
-
-const Attendance = require("../models/Attendance");
-const Labour = require("../models/Labour"); // 👈 IMPORTANT
-const moment = require("moment");
-const { generatePDF } = require("../utils/pdfGenerator");
-
-
-
-// ➕ ADD ATTENDANCE
-exports.addAttendance = async (req, res) => {
+// =========================
+// CREATE ATTENDANCE
+// =========================
+exports.createAttendance = async (req, res) => {
   try {
-    const { labourId, date, startTime, endTime } = req.body;
+    const { date, siteName, labours } = req.body;
 
-  // 🔥 Get labour from DB
-const labour = await Labour.findOne({ labourId });
+    const records = [];
 
-if (!labour) {
-  return res.status(404).json({ message: "Labour not found" });
-}
+    for (let item of labours) {
+      const labourData = await Labour.findById(item.labourId);
 
-    // ❗ Duplicate check
-    const existing = await Attendance.findOne({ labourId, date });
-    if (existing) {
-      return res.status(400).json({ message: "Attendance already marked" });
+      if (!labourData) continue;
+
+      const selectedDate = new Date(date);
+      selectedDate.setHours(0, 0, 0, 0);
+
+      const nextDate = new Date(selectedDate);
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      const exists = await Attendance.findOne({
+        labour: labourData._id,
+        date: { $gte: selectedDate, $lt: nextDate }
+      });
+
+      if (exists) continue;
+
+      const { totalHours, overtimeHours } = calculateHours(
+        item.startTime,
+        item.endTime
+      );
+
+      records.push({
+        date: selectedDate,
+        labour: labourData._id,
+        siteName,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        totalHours,
+        overtimeHours
+      });
     }
 
-    // ⏱️ Time calculation
-    let start = moment(startTime, "HH:mm");
-    let end = moment(endTime, "HH:mm");
+    if (records.length === 0) {
+      return res.status(400).json({ message: "No valid attendance to save" });
+    }
 
-    let hours = moment.duration(end.diff(start)).asHours();
-    if (hours < 0) hours += 24;
+    const saved = await Attendance.insertMany(records);
 
-    let overtime = hours > 8 ? hours - 8 : 0;
-
-    const attendance = new Attendance({
-      labourId,
-      date,
-      name: labour.name,
-      workType: labour.workType,
-      startTime,
-      endTime,
-      totalHours: hours,
-      overtime
+    res.status(201).json({
+      message: "Attendance created",
+      count: saved.length,
+      data: saved
     });
 
-    await attendance.save();
-
-    res.json({
-      message: "Attendance saved successfully",
-      attendance
-    });
-
-  } catch (err) {
-    res.status(500).json(err);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 
-// 📌 GET ALL
+// =========================
+// GET ALL ATTENDANCE
+// =========================
 exports.getAllAttendance = async (req, res) => {
   try {
-    const data = await Attendance.find().sort({ date: -1 });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json(err);
+    const data = await Attendance.find()
+      .populate("labour", "name");
+
+    res.json({
+      count: data.length,
+      data
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 
-// 📌 GET BY ID
-exports.getAttendanceById = async (req, res) => {
+// =========================
+// GET BY DATE
+// =========================
+exports.getAttendanceByDate = async (req, res) => {
   try {
-    const data = await Attendance.findById(req.params.id);
+    const dateStr = req.params.date;
 
-    if (!data) {
-      return res.status(404).json({ message: "Attendance not found" });
+    const selectedDate = new Date(dateStr + "T00:00:00.000Z");
+    const nextDate = new Date(selectedDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+
+    const data = await Attendance.find({
+      date: { $gte: selectedDate, $lt: nextDate }
+    }).populate("labour", "name");
+
+    res.json({
+      count: data.length,
+      data
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+// =========================
+// GET BY LABOUR (BY _id)
+// =========================
+exports.getAttendanceByLabour = async (req, res) => {
+  try {
+    const labourData = await Labour.findById(req.params.labourId);
+
+    if (!labourData) {
+      return res.status(404).json({ message: "Labour not found" });
     }
 
-    res.json(data);
-  } catch (err) {
-    res.status(500).json(err);
+    const data = await Attendance.find({
+      labour: labourData._id
+    }).populate("labour", "name");
+
+    res.json({
+      count: data.length,
+      data
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 
-// ✏️ UPDATE (with recalculation)
+// =========================
+// UPDATE ATTENDANCE
+// =========================
 exports.updateAttendance = async (req, res) => {
   try {
-    const { startTime, endTime } = req.body;
+    const { startTime, endTime, siteName } = req.body;
 
-    let updateData = { ...req.body };
+    const updateData = {};
 
-    // 👉 If time updated → recalculate
+    // ✅ Optional updates
+    if (siteName) updateData.siteName = siteName;
+
     if (startTime && endTime) {
-      let start = moment(startTime, "HH:mm");
-      let end = moment(endTime, "HH:mm");
+      const { totalHours, overtimeHours } =
+        calculateHours(startTime, endTime);
 
-      let hours = moment.duration(end.diff(start)).asHours();
-      if (hours < 0) hours += 24;
-
-      let overtime = hours > 8 ? hours - 8 : 0;
-
-      updateData.totalHours = hours;
-      updateData.overtime = overtime;
+      updateData.startTime = startTime;
+      updateData.endTime = endTime;
+      updateData.totalHours = totalHours;
+      updateData.overtimeHours = overtimeHours;
     }
 
     const updated = await Attendance.findByIdAndUpdate(
@@ -350,14 +194,16 @@ exports.updateAttendance = async (req, res) => {
 
     res.json(updated);
 
-  } catch (err) {
-    res.status(500).json(err);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 
-// 🗑️ DELETE
+// =========================
+// DELETE ATTENDANCE
+// =========================
 exports.deleteAttendance = async (req, res) => {
   try {
     const deleted = await Attendance.findByIdAndDelete(req.params.id);
@@ -368,48 +214,190 @@ exports.deleteAttendance = async (req, res) => {
 
     res.json({ message: "Attendance deleted successfully" });
 
-  } catch (err) {
-    res.status(500).json(err);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
 
 
-// 📄 MONTHLY PDF
-exports.monthlyReport = async (req, res) => {
-  try {
-    const { month } = req.params;
+// =========================
+// MONTHLY REPORT (FAST)
+// =========================
+const generateMonthlyReport = async (month, year) => {
+  const startDate = new Date(Date.UTC(year, month - 1, 1));
+  const endDate = new Date(Date.UTC(year, month, 1));
 
-    const data = await Attendance.find({
-      date: { $regex: `^${month}` }
-    });
+  const labours = await Labour.find()
+    .select("_id name workType dailyWage")
+    .lean();
 
-    generatePDF(data, month, res);
+  const labourMap = new Map(
+    labours.map(l => [l._id.toString(), l])
+  );
 
-  } catch (err) {
-    res.status(500).json(err);
-  }
+  const result = await Attendance.aggregate([
+    {
+      $match: {
+        date: { $gte: startDate, $lt: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: "$labour",
+        totalDays: { $sum: 1 },
+        totalHours: { $sum: "$totalHours" },
+        totalOvertime: { $sum: "$overtimeHours" }
+      }
+    }
+  ]);
+
+  return result
+    .map(item => {
+      const labour = labourMap.get(item._id.toString());
+      if (!labour) return null;
+
+      const perHour = (labour.dailyWage || 0) / 8;
+
+      const totalHours = item.totalHours || 0;
+      const totalOvertime = item.totalOvertime || 0;
+
+      const normalSalary = totalHours * perHour;
+      const overtimeSalary = totalOvertime * perHour;
+
+      const totalSalary = normalSalary + overtimeSalary;
+
+      return {
+        labourId: labour._id,
+        name: labour.name,
+        workType: labour.workType,
+        dailyWage: labour.dailyWage,
+
+        totalDays: item.totalDays,
+        totalHours: Number(totalHours.toFixed(2)),
+        totalOvertime: Number(totalOvertime.toFixed(2)),
+        totalSalary: Number(totalSalary.toFixed(2))
+      };
+    })
+    .filter(Boolean);
 };
 
 
-//MONTHLY PDF BY LABOURID
-exports.labourMonthlyReport = async (req, res) => {
+
+// =========================
+// SINGLE LABOUR MONTHLY DETAILS
+// =========================
+exports.getLabourMonthlyDetails = async (req, res) => {
   try {
-    const { labourId, month } = req.params;
+    const { labourId, year, month } = req.params;
 
-    // 🔥 filter by labour + month
-    const data = await Attendance.find({
-      labourId: labourId,
-      date: { $regex: `^${month}` }
-    });
+    const labour = await Labour.findById(labourId);
 
-    if (data.length === 0) {
-      return res.status(404).json({ message: "No attendance found" });
+    if (!labour) {
+      return res.status(404).json({ message: "Labour not found" });
     }
 
-    generatePDF(data, `${labourId}-${month}`, res);
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+    const endDate = new Date(Date.UTC(year, month, 1));
 
-  } catch (err) {
-    res.status(500).json(err);
+    const attendance = await Attendance.find({
+      labour: labour._id,
+      date: { $gte: startDate, $lt: endDate }
+    }).sort({ date: 1 });
+
+    let totalDays = attendance.length;
+    let totalHours = 0;
+    let totalOvertime = 0;
+    let totalSalary = 0;
+
+    const perHour = labour.dailyWage / 8;
+
+    const attendanceWithSalary = attendance.map(a => {
+      totalHours += a.totalHours;
+      totalOvertime += a.overtimeHours;
+
+      const normalHours = Math.min(a.totalHours, 8);
+
+      const daySalary =
+        (normalHours * perHour) +
+        (a.overtimeHours * perHour);
+
+      totalSalary += daySalary;
+
+      return {
+        date: a.date,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        totalHours: a.totalHours,
+        overtimeHours: a.overtimeHours,
+        daySalary: Number(daySalary.toFixed(2))
+      };
+    });
+
+    res.json({
+      labourId: labour._id,
+      name: labour.name,
+      workType: labour.workType,
+      dailyWage: labour.dailyWage,
+      month,
+      year,
+
+      attendance: attendanceWithSalary,
+
+      summary: {
+        totalDays,
+        totalHours: Number(totalHours.toFixed(2)),
+        totalOvertime: Number(totalOvertime.toFixed(2)),
+        totalSalary: Number(totalSalary.toFixed(2))
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+// =========================
+// EXCEL EXPORT
+// =========================
+exports.getMonthlyReportExcel = async (req, res) => {
+  try {
+    const { month, year } = req.params;
+
+    const reportData = await generateMonthlyReport(month, year);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Monthly Report");
+
+    worksheet.columns = [
+      { header: "Labour ID", key: "labourId", width: 15 },
+      { header: "Name", key: "name", width: 20 },
+      { header: "Work Type", key: "workType", width: 20 },
+      { header: "Daily Wage", key: "dailyWage", width: 15 },
+      { header: "Days", key: "totalDays", width: 10 },
+      { header: "Hours", key: "totalHours", width: 15 },
+      { header: "Overtime", key: "totalOvertime", width: 15 },
+      { header: "Salary", key: "totalSalary", width: 15 }
+    ];
+
+    reportData.forEach(r => worksheet.addRow(r));
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=attendance_${month}_${year}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

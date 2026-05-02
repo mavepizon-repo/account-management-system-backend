@@ -40,4 +40,4 @@ const labourSchema = new mongoose.Schema(
 { timestamps: true }
 );
 
-module.exports = mongoose.model("labour", labourSchema);
+module.exports = mongoose.model("Labour", labourSchema);
