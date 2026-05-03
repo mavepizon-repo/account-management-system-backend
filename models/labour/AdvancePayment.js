@@ -21,12 +21,6 @@ const advancePaymentSchema = new mongoose.Schema(
   advanceAmount: {
     type: Number,
     required: true
-  },
-
-  receivedStatus: {
-    type: String,
-    enum: ["unpaid", "paid"],
-    default: "unpaid"
   }
 
 },

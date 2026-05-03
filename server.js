@@ -15,10 +15,10 @@ const workSubcontractRoutes = require("./routes/subcontractor/workSubcontractRou
 const app = express();
 
 const voucherRoutes = require("./routes/vendor/voucherRoutes");
-
 const labourRoutes = require("./routes/labour/labourRoutes");
-
 const attendanceRoutes = require("./routes/labour/attendanceRoutes");
+const labourVoucherRoutes = require("./routes/labour/labourVoucherRoutes");
+const advancePaymentRoutes = require("./routes/labour/advancePaymentRoutes");
 
 // connect database
 connectDB();
@@ -48,7 +48,9 @@ app.use("/api/labours", labourRoutes);
 
 app.use("/api/attendance", attendanceRoutes);
 
-app.use("/api/advancePayment", advanceRoutes);
+app.use("/api/advancePayment", advancePaymentRoutes);
+
+app.use("/api/labourVoucher", labourVoucherRoutes);
 
 const PORT = process.env.PORT || 8080;
 

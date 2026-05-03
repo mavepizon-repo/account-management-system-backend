@@ -24,10 +24,6 @@ router.get("/get-by-labour/:labourId", advanceController.getAdvancePaymentByLabo
 router.put("/update/:id", advanceController.updateAdvance);
 
 
-// UPDATE STATUS (PAID / UNPAID)
-router.put("/update-status/:id", advanceController.updateStatus);
-
-
 // DELETE ADVANCE PAYMENT
 router.delete("/delete/:id", advanceController.deleteAdvance);
 

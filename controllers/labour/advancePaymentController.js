@@ -78,30 +78,6 @@ exports.getAdvancePaymentByLabourId = async (req, res) => {
 };
 
 
-// UPDATE STATUS (PAID / UNPAID)
-exports.updateStatus = async (req, res) => {
-  try {
-
-    const { receivedStatus } = req.body;
-
-    const advance = await AdvancePayment.findByIdAndUpdate(
-      req.params.id,
-      { receivedStatus },
-      { new: true }
-    );
-
-    res.status(200).json({
-      message: "Status updated",
-      data: advance
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-const AdvancePayment = require("../../models/labour/AdvancePayment");
-
 // UPDATE ADVANCE PAYMENT
 exports.updateAdvance = async (req, res) => {
   try {
