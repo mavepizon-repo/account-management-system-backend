@@ -24,7 +24,14 @@ const advancePaymentRoutes = require("./routes/labour/advancePaymentRoutes");
 connectDB();
 
 // middlewares
-app.use(cors());
+// middlewares
+app.use(cors({
+  origin: "https://design-art-interior.netlify.app",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
+
+app.use(express.json());
 app.use(express.json());
 
 // routes
