@@ -1,45 +1,59 @@
 const mongoose = require("mongoose");
 
 const labourVoucherSchema = new mongoose.Schema(
-{
-  labour: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Labour",
-    required: true
+  {
+    labour: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Labour",
+      required: true
+    },
+
+    month: {
+      type: Number,
+      required: true
+    },
+
+    year: {
+      type: Number,
+      required: true
+    },
+
+    totalWorkingDays: {
+      type: Number,
+      default: 0
+    },
+
+    totalWorkingHours: {
+      type: Number,
+      default: 0
+    },
+
+    overtimeHours: {
+      type: Number,
+      default: 0
+    },
+
+    totalSalary: {
+      type: Number,
+      required: true
+    },
+
+    totalAdvance: {
+      type: Number,
+      required: true
+    },
+
+    payableSalary: {
+      type: Number,
+      required: true
+    },
+
+    voucherPdf: {
+      url: { type: String },
+      public_id: { type: String }
+    }
   },
-
-  month: {
-    type: Number,
-    required: true
-  },
-
-  year: {
-    type: Number,
-    required: true
-  },
-
-  totalSalary: {
-    type: Number,
-    required: true
-  },
-
-  totalAdvance: {
-    type: Number,
-    required: true
-  },
-
-  payableSalary: {
-    type: Number,
-    required: true
-  },
-
-  voucherPdf: {
-    url: { type: String },
-    public_id: { type: String }
-  }
-
-},
-{ timestamps: true }
+  { timestamps: true }
 );
 
 labourVoucherSchema.index(

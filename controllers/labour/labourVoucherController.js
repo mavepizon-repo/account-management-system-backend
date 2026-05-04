@@ -282,8 +282,16 @@ exports.createVoucher = async (req, res) => {
 exports.getAllVouchers = async (req, res) => {
   try {
 
-    const vouchers = await LabourVoucher.find()
-      .populate("labour", "name phone");
+    let vouchers = await LabourVoucher.find()
+      .populate("labour", "name phone")
+      .lean();
+
+    vouchers = vouchers.map(v => ({
+      ...v,
+      totalWorkingDays: v.totalWorkingDays ?? 0,
+      totalWorkingHours: v.totalWorkingHours ?? 0,
+      overtimeHours: v.overtimeHours ?? 0
+    }));
 
     res.status(200).json(vouchers);
 
@@ -292,7 +300,6 @@ exports.getAllVouchers = async (req, res) => {
   }
 };
 
-
 // ============================
 // GET VOUCHER BY ID
 // ============================
@@ -300,14 +307,20 @@ exports.getAllVouchers = async (req, res) => {
 exports.getVoucherById = async (req, res) => {
   try {
 
-    const voucher = await LabourVoucher.findById(req.params.id)
-      .populate("labour", "name phone dailyWage");
+    let voucher = await LabourVoucher.findById(req.params.id)
+      .populate("labour", "name phone dailyWage")
+      .lean(); // important
 
     if (!voucher) {
       return res.status(404).json({
         message: "Voucher not found"
       });
     }
+
+    // ✅ Ensure missing fields are added
+    voucher.totalWorkingDays = voucher.totalWorkingDays ?? 0;
+    voucher.totalWorkingHours = voucher.totalWorkingHours ?? 0;
+    voucher.overtimeHours = voucher.overtimeHours ?? 0;
 
     res.status(200).json(voucher);
 
