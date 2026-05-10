@@ -11,7 +11,8 @@ const purchaseSchema = new mongoose.Schema(
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Vendor",
-    required: true
+    required: true,
+    index: true
   },
 
   date: {
@@ -53,11 +54,11 @@ const purchaseSchema = new mongoose.Schema(
   totalGST: { type: Number, default: 0 },
   grandTotal: { type: Number, default: 0 },
 
-  paidAmount: { type: Number, default: 0 },
+  cumulativePaidAmount: { type: Number, default: 0 },
 
   paymentStatus: {
     type: String,
-    enum: ["Unpaid", "Partial", "Paid", "AdvancePayment"],
+    enum: ["Unpaid", "Partial", "Paid"],
     default: "Unpaid"
   }
 },
@@ -65,3 +66,6 @@ const purchaseSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Purchase", purchaseSchema);
+
+
+

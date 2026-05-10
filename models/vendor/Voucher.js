@@ -4,8 +4,19 @@ const voucherSchema = new mongoose.Schema({
 
   voucherNumber: {
     type: String,
-    unique: true,
-    required: true
+    unique: true
+  },
+
+  vendor: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Vendor",
+    default: null
+  },
+
+  subcontract: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Subcontract",
+    default: null
   },
 
   receiverType: {
@@ -65,3 +76,5 @@ const voucherSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model("Voucher", voucherSchema);
+
+

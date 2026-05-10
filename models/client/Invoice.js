@@ -11,7 +11,8 @@ const invoiceSchema = new mongoose.Schema(
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
-    required: true
+    required: true,
+    index: true
   },
 
   date: {
@@ -89,14 +90,14 @@ const invoiceSchema = new mongoose.Schema(
     default: 0
   },
 
-  paidAmount: {
+  cumulativePaidAmount: {
     type: Number,
     default: 0
   },
 
   paymentStatus: {
     type: String,
-    enum: ["Unpaid", "Partial", "Paid", "AdvancePayment"],
+    enum: ["Unpaid", "Partial", "Paid"],
     default: "Unpaid"
   }
 

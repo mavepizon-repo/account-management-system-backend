@@ -1,12 +1,49 @@
 const Voucher = require("../../models/vendor/Voucher");
 const Purchase = require("../../models/vendor/Purchase");
+const Vendor = require("../../models/vendor/Vendor");
 const WorkSubcontract = require("../../models/subcontractor/WorkSubcontract");
+const Subcontract = require("../../models/subcontractor/Subcontract");
 
 const cloudinary = require("../../config/cloudinary");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 
+// without purchase bill
+// {
+//   "receiverType": "Vendor",
+//   "receiver": "69ff29dc220c81661cbc38c7",
+//   "vendorId": "69ff29dc220c81661cbc38c7",
+//   "date": "2026-05-09",
+//   "purpose": "General Expense Payment",
+//   "amount": 5000,
+//   "paymentMethod": "cash",
+//   "notes": "Office expense payment"
+// }
+
+
+// voucher with purchase bill Id
+// {
+//   "receiverType": "Vendor",
+//   "receiver": "69ff29dc220c81661cbc38c7",
+//   "purchaseId": "69ff2c86fb346d6e719dd868",
+//   "purpose": "Purchase Bill Payment",
+//   "amount": 8000,
+//   "paymentMethod": "online",
+//   "notes": "Partial payment for material purchase"
+// }
+
+
+// Without workSubcontract ID
+// {
+//   "subcontract": "69ff78853f3d51a068059fed",
+//   "projectName": "College Building Painting",
+//   "description": "Interior and exterior painting work",
+//   "startDate": "2026-05-01",
+//   "endDate": "2026-06-15",
+//   "totalAmount": 8000,
+//   "gstPercent": 18
+// }
 
 // ===============================
 // CREATE VOUCHER
@@ -16,12 +53,15 @@ exports.createVoucher = async (req, res) => {
 
     const {
       purchaseId,
+      vendorId,
       workSubcontractId,
+      subcontractId,
       receiverType,
       receiver,
       purpose,
       amount,
-      paymentMethod
+      paymentMethod,
+      notes
     } = req.body;
 
     if (!amount || amount <= 0) {
@@ -32,12 +72,15 @@ exports.createVoucher = async (req, res) => {
     let workSubcontract = null;
 
     let totalAmount = 0;
-    let newPaidAmount = 0;
+    let newCumulativePaidAmount = 0;
     let outstandingAmount = 0;
+    let vendor = null;
+    let subcontract = null;
 
     // ===============================
     // PURCHASE PAYMENT
     // ===============================
+
     if (purchaseId) {
 
       purchase = await Purchase.findById(purchaseId).populate("vendor");
@@ -46,7 +89,9 @@ exports.createVoucher = async (req, res) => {
         return res.status(404).json({ message: "Purchase not found" });
       }
 
-      const remainingAmount = purchase.grandTotal - purchase.paidAmount;
+      vendor = purchase.vendor;
+
+      const remainingAmount = purchase.grandTotal - purchase.cumulativePaidAmount;
 
       if (amount > remainingAmount) {
         return res.status(400).json({
@@ -57,23 +102,24 @@ exports.createVoucher = async (req, res) => {
 
       totalAmount = purchase.grandTotal;
 
-      newPaidAmount = purchase.paidAmount + amount;
+      newCumulativePaidAmount= purchase.cumulativePaidAmount + amount;
 
-      outstandingAmount = totalAmount - newPaidAmount;
+      outstandingAmount = totalAmount - newCumulativePaidAmount;
 
-      purchase.paidAmount = newPaidAmount;
+      purchase.cumulativePaidAmount = newCumulativePaidAmount;
 
-      if (newPaidAmount === 0) purchase.paymentStatus = "Unpaid";
-      else if (newPaidAmount < purchase.grandTotal) purchase.paymentStatus = "Partial";
+      if (newCumulativePaidAmount === 0) purchase.paymentStatus = "Unpaid";
+      else if (newCumulativePaidAmount < purchase.grandTotal) purchase.paymentStatus = "Partial";
       else purchase.paymentStatus = "Paid";
 
       await purchase.save();
     }
 
+  
     // ===============================
     // WORK SUBCONTRACT PAYMENT
     // ===============================
-    if (workSubcontractId) {
+    else if (workSubcontractId) {
 
       workSubcontract = await WorkSubcontract.findById(workSubcontractId)
         .populate("subcontract");
@@ -83,7 +129,7 @@ exports.createVoucher = async (req, res) => {
       }
 
       const remainingAmount =
-        workSubcontract.totalAmount - workSubcontract.paidAmount;
+        workSubcontract.totalAmount - workSubcontract.cumulativePaidAmount;
 
       if (amount > remainingAmount) {
         return res.status(400).json({
@@ -94,20 +140,59 @@ exports.createVoucher = async (req, res) => {
 
       totalAmount = workSubcontract.totalAmount;
 
-      newPaidAmount = workSubcontract.paidAmount + amount;
+      newCumulativePaidAmount = workSubcontract.cumulativePaidAmount + amount;
 
-      outstandingAmount = totalAmount - newPaidAmount;
+      outstandingAmount = totalAmount - newCumulativePaidAmount;
 
-      workSubcontract.paidAmount = newPaidAmount;
+      workSubcontract.cumulativePaidAmount = newCumulativePaidAmount;
 
       workSubcontract.balanceAmount = outstandingAmount;
 
-      if (newPaidAmount === 0) workSubcontract.paymentStatus = "Unpaid";
-      else if (newPaidAmount < totalAmount) workSubcontract.paymentStatus = "Partial";
+      if (newCumulativePaidAmount === 0) workSubcontract.paymentStatus = "Unpaid";
+      else if (newCumulativePaidAmount < totalAmount) workSubcontract.paymentStatus = "Partial";
       else workSubcontract.paymentStatus = "Paid";
 
       await workSubcontract.save();
     }
+
+    else {
+
+    // ===============================
+    // VENDOR ADVANCE VOUCHER
+    // ===============================
+
+    if (receiverType === "Vendor") {
+
+      vendor = await Vendor.findById(vendorId);
+
+      if (!vendor) {
+        return res.status(404).json({
+          message: "Vendor not found"
+        });
+      }
+
+    }
+
+    // ===============================
+    // SUBCONTRACT ADVANCE VOUCHER
+    // ===============================
+
+    else if (receiverType === "Subcontract") {
+
+      subcontract = await Subcontract.findById(subcontractId);
+
+      if (!subcontract) {
+        return res.status(404).json({
+          message: "Subcontract not found"
+        });
+      }
+
+    }
+
+  totalAmount = amount;
+  newCumulativePaidAmount = amount;
+  outstandingAmount = 0;
+}
 
     // ===============================
     // GENERATE VOUCHER NUMBER
@@ -126,7 +211,7 @@ exports.createVoucher = async (req, res) => {
     // TEMP PDF
     // ===============================
 
-    const uploadDir = path.join(__dirname, "../uploads");
+    const uploadDir = path.join(__dirname, "../../uploads");
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -147,7 +232,7 @@ exports.createVoucher = async (req, res) => {
     const startX = 50;
     const startY = 50;
 
-    const logoPath = path.join(__dirname, "../assets/logo.jpeg");
+    const logoPath = path.join(__dirname, "../../assets/logo.jpeg");
 
     if (fs.existsSync(logoPath)) {
       doc.image(logoPath, startX, startY, { width: 110 });
@@ -241,10 +326,20 @@ exports.createVoucher = async (req, res) => {
       y += 25;
     };
 
-    row("Total Amount", totalAmount);
-    row("Amount Paid Now", amount);
-    row("Total Paid Till Now", newPaidAmount);
-    row("Outstanding Amount", outstandingAmount);
+    if (!purchase && !workSubcontract) {
+
+      // ADVANCE PAYMENT VOUCHER
+      row("Amount Paid", amount);
+
+    } else {
+
+      // NORMAL PAYMENT VOUCHER
+      row("Total Amount", totalAmount);
+      row("Amount Paid Now", amount);
+      row("Total Paid Till Now", newCumulativePaidAmount);
+      row("Outstanding Amount", outstandingAmount);
+
+    }
 
     doc.moveTo(50, y).lineTo(550, y).stroke();
 
@@ -276,6 +371,8 @@ exports.createVoucher = async (req, res) => {
 
         const voucher = new Voucher({
           voucherNumber,
+          vendor: vendor ? vendor._id : null,
+          subcontract: subcontract ? subcontract._id : null,
           receiverType,
           receiver,
           purchase: purchase ? purchase._id : null,
@@ -311,6 +408,8 @@ exports.createVoucher = async (req, res) => {
   }
 };
 
+
+
 // ===============================
 // GET ALL VOUCHERS
 // ===============================
@@ -322,7 +421,7 @@ exports.getAllVouchers = async (req, res) => {
         path: "purchase",
         populate: {
           path: "vendor",
-          select: "vendorCode name"
+          select: "vendorId name"
         }
       })
       .populate({
@@ -378,7 +477,7 @@ exports.getVouchersByPurchaseId = async (req, res) => {
       path: "purchase",
       populate: {
         path: "vendor",
-        select: "vendorCode name"
+        select: "vendorId name"
       }
     });
 
@@ -426,16 +525,35 @@ exports.getVouchersByWorkSubcontractId = async (req, res) => {
 // ===============================
 // UPDATE VOUCHER
 // ===============================
+
+// {
+//   "receiverType": "Subcontract",
+//   "receiver": "69ff78853f3d51a068059fed",
+//   "subcontractId": "69ff78853f3d51a068059fed",
+//   "workSubcontractId": "69ff85af7159769874129aed",
+//   "date": "2026-05-09",
+//   "purpose": "General Expense Payment",
+//   "amount": 2000,
+//   "paymentMethod": "cash",
+//   "notes": "Office expense payment"
+// }
+
 exports.updateVoucher = async (req, res) => {
   try {
 
     const { voucherId } = req.params;
 
     const {
+      purchaseId,
+      vendorId,
+      workSubcontractId,
+      subcontractId,
+      date,
       receiverType,
       receiver,
       purpose,
       amount,
+      notes,
       paymentMethod
     } = req.body;
 
@@ -456,82 +574,316 @@ exports.updateVoucher = async (req, res) => {
     let purchase = null;
     let workSubcontract = null;
 
+
     let totalAmount = 0;
-    let newPaidAmount = 0;
+    let newCumulativePaidAmount = 0;
     let outstandingAmount = 0;
 
-    // ===============================
-    // PURCHASE UPDATE
-    // ===============================
-    if (voucher.purchase) {
+    if (purchaseId) {
 
-      purchase = await Purchase.findById(voucher.purchase).populate("vendor");
+      purchase = await Purchase.findById(purchaseId).populate("vendor");
 
-      purchase.paidAmount = purchase.paidAmount - oldAmount;
-
-      const remainingAmount = purchase.grandTotal - purchase.paidAmount;
-
-      if (amount > remainingAmount) {
-        return res.status(400).json({
-          message: "Payment exceeds remaining balance",
-          remainingAmount
+      if (!purchase) {
+        return res.status(404).json({
+          message: "Purchase not found"
         });
       }
 
-      newPaidAmount = purchase.paidAmount + amount;
+      // ===============================
+      // UPDATE CURRENT VOUCHER
+      // ===============================
 
-      purchase.paidAmount = newPaidAmount;
+      voucher.amount = amount;
+
+      if (date) {
+        voucher.date = date;
+      }
+
+      voucher.purchase = purchaseId;
+      voucher.workSubcontract = null;
+
+      await voucher.save();
+
+      // ===============================
+      // DELETE OLD AUTO SPLIT VOUCHERS
+      // ===============================
+
+      const purchaseVouchersForDelete = await Voucher.find({
+        purchase: purchaseId
+      });
+
+      for (const item of purchaseVouchersForDelete) {
+
+        await Voucher.deleteMany({
+          voucherNumber: item.voucherNumber + "-A"
+        });
+      }
+
+      // ===============================
+      // GET UPDATED PURCHASE VOUCHERS
+      // ===============================
+
+      const purchaseVouchers = await Voucher.find({
+        purchase: purchaseId
+      }).sort({ createdAt: 1 });
+
+      let remainingBillAmount = purchase.grandTotal;
+
+      newCumulativePaidAmount = 0;
+
+      // ===============================
+      // RECALCULATE ALL VOUCHERS
+      // ===============================
+
+      for (const item of purchaseVouchers) {
+
+        // Bill already completed
+        if (remainingBillAmount <= 0) {
+
+          // Entire voucher becomes advance
+          item.purchase = null;
+
+          await item.save();
+
+          continue;
+        }
+
+        // Voucher fully usable
+        if (item.amount <= remainingBillAmount) {
+
+          remainingBillAmount -= item.amount;
+
+          newCumulativePaidAmount += item.amount;
+        }
+
+        // Voucher larger than remaining bill
+        else {
+
+          const usedAmount = remainingBillAmount;
+
+          const advanceAmount =
+            item.amount - usedAmount;
+
+          // Update original voucher
+          item.amount = usedAmount;
+
+          await item.save();
+
+          // Create advance voucher
+          const splitVoucher = new Voucher({
+            voucherNumber: item.voucherNumber + "-A",
+            vendor: item.vendor,
+            receiverType: item.receiverType,
+            receiver: item.receiver,
+            purpose: "Advance balance after voucher update",
+            amount: advanceAmount,
+            paymentMethod: item.paymentMethod,
+            notes: "Auto generated advance voucher"
+          });
+
+          await splitVoucher.save();
+
+          newCumulativePaidAmount += usedAmount;
+
+          remainingBillAmount = 0;
+        }
+      }
+
+      // ===============================
+      // FINAL PURCHASE CALCULATION
+      // ===============================
+
+      purchase.cumulativePaidAmount =
+        newCumulativePaidAmount;
 
       totalAmount = purchase.grandTotal;
 
-      outstandingAmount = totalAmount - newPaidAmount;
+      outstandingAmount =
+        totalAmount - newCumulativePaidAmount;
 
-      if (newPaidAmount === 0) purchase.paymentStatus = "Unpaid";
-      else if (newPaidAmount < purchase.grandTotal) purchase.paymentStatus = "Partial";
-      else purchase.paymentStatus = "Paid";
+      if (newCumulativePaidAmount === 0)
+        purchase.paymentStatus = "Unpaid";
+      else if (newCumulativePaidAmount < totalAmount)
+        purchase.paymentStatus = "Partial";
+      else
+        purchase.paymentStatus = "Paid";
 
       await purchase.save();
     }
 
-    // ===============================
-    // WORKSUBCONTRACT UPDATE
-    // ===============================
-    if (voucher.workSubcontract) {
+    else if (workSubcontractId) {
 
       workSubcontract = await WorkSubcontract
-        .findById(voucher.workSubcontract)
+        .findById(workSubcontractId)
         .populate("subcontract");
 
-      workSubcontract.paidAmount =
-        workSubcontract.paidAmount - oldAmount;
-
-      const remainingAmount =
-        workSubcontract.totalAmount - workSubcontract.paidAmount;
-
-      if (amount > remainingAmount) {
-        return res.status(400).json({
-          message: "Payment exceeds remaining balance",
-          remainingAmount
+      if (!workSubcontract) {
+        return res.status(404).json({
+          message: "WorkSubcontract not found"
         });
       }
 
-      newPaidAmount = workSubcontract.paidAmount + amount;
+      // ===============================
+      // UPDATE CURRENT VOUCHER
+      // ===============================
 
-      workSubcontract.paidAmount = newPaidAmount;
+      voucher.amount = amount;
 
-      totalAmount = workSubcontract.totalAmount;
+      if (date) {
+        voucher.date = date;
+      }
 
-      outstandingAmount = totalAmount - newPaidAmount;
+      voucher.workSubcontract = workSubcontractId;
 
-      workSubcontract.balanceAmount = outstandingAmount;
+      voucher.purchase = null;
 
-      if (newPaidAmount === 0) workSubcontract.paymentStatus = "Unpaid";
-      else if (newPaidAmount < totalAmount) workSubcontract.paymentStatus = "Partial";
-      else workSubcontract.paymentStatus = "Paid";
+      await voucher.save();
+
+      // ===============================
+      // DELETE OLD AUTO SPLIT VOUCHERS
+      // ===============================
+
+      const workVouchersForDelete = await Voucher.find({
+        workSubcontract: workSubcontractId
+      });
+
+      for (const item of workVouchersForDelete) {
+
+        await Voucher.deleteMany({
+          voucherNumber: item.voucherNumber + "-A"
+        });
+      }
+
+      // ===============================
+      // GET UPDATED WORK VOUCHERS
+      // ===============================
+
+      const workVouchers = await Voucher.find({
+        workSubcontract: workSubcontractId
+      }).sort({ createdAt: 1 });
+
+      let remainingBillAmount =
+        workSubcontract.grandTotal;
+
+      newCumulativePaidAmount = 0;
+
+      // ===============================
+      // RECALCULATE ALL VOUCHERS
+      // ===============================
+
+      for (const item of workVouchers) {
+
+        // Work already completed
+        if (remainingBillAmount <= 0) {
+
+          // Entire voucher becomes advance
+          item.workSubcontract = null;
+
+          await item.save();
+
+          continue;
+        }
+
+        // Voucher fully usable
+        if (item.amount <= remainingBillAmount) {
+
+          remainingBillAmount -= item.amount;
+
+          newCumulativePaidAmount += item.amount;
+        }
+
+        // Voucher larger than remaining amount
+        else {
+
+          const usedAmount = remainingBillAmount;
+
+          const advanceAmount =
+            item.amount - usedAmount;
+
+          // Update original voucher
+          item.amount = usedAmount;
+
+          await item.save();
+
+          // Create advance voucher
+          const splitVoucher = new Voucher({
+
+            voucherNumber:
+              item.voucherNumber + "-A",
+
+            subcontract: item.subcontract,
+
+            receiverType: item.receiverType,
+
+            receiver: item.receiver,
+
+            purpose:
+              "Advance balance after voucher update",
+
+            amount: advanceAmount,
+
+            paymentMethod: item.paymentMethod,
+
+            notes:
+              "Auto generated advance voucher"
+
+          });
+
+          await splitVoucher.save();
+
+          newCumulativePaidAmount += usedAmount;
+
+          remainingBillAmount = 0;
+        }
+      }
+
+      // ===============================
+      // FINAL WORK CALCULATION
+      // ===============================
+
+      workSubcontract.cumulativePaidAmount =
+        newCumulativePaidAmount;
+
+      totalAmount = workSubcontract.grandTotal;
+
+      outstandingAmount =
+        totalAmount - newCumulativePaidAmount;
+
+      workSubcontract.balanceAmount =
+        outstandingAmount;
+
+      if (newCumulativePaidAmount === 0)
+        workSubcontract.paymentStatus = "Unpaid";
+
+      else if (newCumulativePaidAmount < totalAmount)
+        workSubcontract.paymentStatus = "Partial";
+
+      else
+        workSubcontract.paymentStatus = "Paid";
 
       await workSubcontract.save();
     }
 
+    else {
+
+      // ADVANCE VOUCHER (no work subcontract attached)
+
+      voucher.amount = amount;
+
+      if (date) {
+        voucher.date = date;
+      }
+
+      voucher.workSubcontract = null;
+      voucher.purchase = null;
+
+      totalAmount = amount;
+      newCumulativePaidAmount = amount;
+      outstandingAmount = 0;
+
+    }
+
+  
     // ===============================
     // UPDATE VOUCHER DATA FIRST
     // ===============================
@@ -539,7 +891,8 @@ exports.updateVoucher = async (req, res) => {
     voucher.receiverType = receiverType || voucher.receiverType;
     voucher.receiver = receiver || voucher.receiver;
     voucher.purpose = purpose || voucher.purpose;
-    voucher.amount = amount;
+    voucher.amount = amount || voucher.amount;
+    voucher.notes = notes || voucher.notes;
     voucher.paymentMethod = paymentMethod || voucher.paymentMethod;
 
     await voucher.save();
@@ -550,7 +903,7 @@ exports.updateVoucher = async (req, res) => {
     // CREATE TEMP PDF
     // ===============================
 
-    const uploadDir = path.join(__dirname, "../uploads");
+    const uploadDir = path.join(__dirname, "../../uploads");
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -637,7 +990,7 @@ exports.updateVoucher = async (req, res) => {
     };
 
     infoRow("Voucher Number:", voucherNumber);
-    infoRow("Date:", new Date().toLocaleDateString());
+    infoRow("Date:", new Date(voucher.date).toLocaleDateString());
     infoRow("Receiver Type:", voucher.receiverType);
     infoRow("Purpose:", voucher.purpose);
     infoRow("Payment Method:", voucher.paymentMethod);
@@ -665,10 +1018,20 @@ exports.updateVoucher = async (req, res) => {
       y += 25;
     };
 
-    row("Total Amount", totalAmount);
-    row("Amount Paid Now", voucher.amount);
-    row("Total Paid Till Now", newPaidAmount);
-    row("Outstanding Amount", outstandingAmount);
+    if (!purchase && !workSubcontract) {
+
+      // ADVANCE PAYMENT VOUCHER
+      row("Amount Paid", amount);
+
+    } else {
+
+      // NORMAL PAYMENT VOUCHER
+      row("Total Amount", totalAmount);
+      row("Amount Paid Now", amount);
+      row("Total Paid Till Now", newCumulativePaidAmount);
+      row("Outstanding Amount", outstandingAmount);
+
+    }
 
     doc.moveTo(50, y).lineTo(550, y).stroke();
 
@@ -738,13 +1101,13 @@ exports.deleteVoucher = async (req, res) => {
 
       const purchase = await Purchase.findById(voucher.purchase);
 
-      purchase.paidAmount -= voucher.amount;
+      purchase.cumulativePaidAmount -= voucher.amount;
 
-      if (purchase.paidAmount <= 0) {
-        purchase.paidAmount = 0;
+      if (purchase.cumulativePaidAmount <= 0) {
+        purchase.cumulativePaidAmount = 0;
         purchase.paymentStatus = "Unpaid";
       }
-      else if (purchase.paidAmount < purchase.grandTotal) {
+      else if (purchase.cumulativePaidAmount < purchase.grandTotal) {
         purchase.paymentStatus = "Partial";
       }
       else {
@@ -764,18 +1127,19 @@ exports.deleteVoucher = async (req, res) => {
         voucher.workSubcontract
       );
 
-      workSubcontract.paidAmount -= voucher.amount;
+      workSubcontract.cumulativePaidAmount -= voucher.amount;
 
-      if (workSubcontract.paidAmount < 0) {
-        workSubcontract.paidAmount = 0;
+      if (workSubcontract.cumulativePaidAmount < 0) {
+        workSubcontract.cumulativePaidAmount = 0;
       }
 
       workSubcontract.balanceAmount =
-        workSubcontract.totalAmount - workSubcontract.paidAmount;
+            workSubcontract.grandTotal -
+            workSubcontract.cumulativePaidAmount;
 
-      if (workSubcontract.paidAmount === 0)
+      if (workSubcontract.cumulativePaidAmount === 0)
         workSubcontract.paymentStatus = "Unpaid";
-      else if (workSubcontract.paidAmount < workSubcontract.totalAmount)
+      else if (workSubcontract.cumulativePaidAmount < workSubcontract.grandTotal)
         workSubcontract.paymentStatus = "Partial";
       else
         workSubcontract.paymentStatus = "Paid";
@@ -797,15 +1161,3 @@ exports.deleteVoucher = async (req, res) => {
 
 
 
-
-
-
-
-// {
-//   "receiverType": "Vendor",
-//   "receiver": "69f49aaf393abace91f61d01",
-//   "purchaseId": "69f4a12d95232933d78acbb5",
-//   "purpose": "Material payment",
-//   "amount": 1000,
-//   "paymentMethod": "cash"
-// }

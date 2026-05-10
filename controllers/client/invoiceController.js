@@ -1,5 +1,5 @@
 const Invoice = require("../../models/client/Invoice");
-
+const Receipt = require("../../models/client/Receipt");
 
 // CREATE INVOICE
 exports.createInvoice = async (req, res) => {
@@ -14,7 +14,7 @@ exports.createInvoice = async (req, res) => {
     } = req.body;
 
     // ALWAYS START WITH 0
-    const paidAmount = 0;
+    const cumulativePaidAmount = 0;
 
     // AUTO INVOICE NUMBER
     const lastInvoice = await Invoice.findOne().sort({ createdAt: -1 });
@@ -69,11 +69,59 @@ exports.createInvoice = async (req, res) => {
       totalAmount,
       totalGST,
       grandTotal,
-      paidAmount, // always 0
+      cumulativePaidAmount,
       paymentStatus
     });
 
     const savedInvoice = await invoice.save();
+
+    // find all the receipts which are for the particular client
+    // ===============================
+    // APPLY ADVANCE RECEIPTS
+    // ===============================
+
+    const advanceReceipts = await Receipt.find({
+      client: client,
+      invoice: null,
+      remainingAmount: { $gt: 0 }
+    }).sort({ paymentDate: 1 });
+
+    let remaining = savedInvoice.grandTotal;
+
+    for (const r of advanceReceipts) {
+
+      if (remaining <= 0) break;
+
+      const applyAmount = Math.min(r.remainingAmount, remaining);
+
+      r.remainingAmount -= applyAmount;
+
+      remaining -= applyAmount;
+
+      // if receipt fully consumed
+      if (r.remainingAmount === 0) {
+        r.invoice = savedInvoice._id;
+      }
+
+      await r.save();
+    }
+
+    // Update invoice paid amount
+    const paidAmount = savedInvoice.grandTotal - remaining;
+    savedInvoice.cumulativePaidAmount = paidAmount;
+
+    // Update payment status
+    if (paidAmount === 0) {
+      savedInvoice.paymentStatus = "Unpaid";
+    }
+    else if (paidAmount < savedInvoice.grandTotal) {
+      savedInvoice.paymentStatus = "Partial";
+    }
+    else {
+      savedInvoice.paymentStatus = "Paid";
+    }
+
+    await savedInvoice.save();
 
     res.status(201).json({
       message: "Invoice Created Successfully",
@@ -181,9 +229,9 @@ exports.getInvoicesByClientAndStatus = async (req, res) => {
     const { clientId, paymentStatus } = req.params;
 
     const invoices = await Invoice.find({
-      clientCode: clientId,
+      client: clientId,
       paymentStatus: paymentStatus
-    }).populate("clientCode", "clientCode name");
+    }).populate("client", "clientCode name");
 
     res.status(200).json({
       count: invoices.length,
@@ -274,6 +322,22 @@ exports.updateInvoiceProducts = async (req, res) => {
     invoice.totalGST = totalGST;
     invoice.grandTotal = grandTotal;
 
+    // If paid amount exceeds new invoice total
+    if (invoice.cumulativePaidAmount > invoice.grandTotal) {
+      return res.status(400).json({ message: "Invoice total cannot be less than already paid amount" });
+    }
+
+    // Recalculate payment status
+    if (invoice.cumulativePaidAmount === 0) {
+      invoice.paymentStatus = "Unpaid";
+    }
+    else if (invoice.cumulativePaidAmount < invoice.grandTotal) {
+      invoice.paymentStatus = "Partial";
+    }
+    else {
+      invoice.paymentStatus = "Paid";
+    }
+
     await invoice.save();
 
     res.status(200).json({
@@ -301,6 +365,20 @@ exports.deleteInvoice = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
+    // Prevent deleting invoice if payments exist
+    if (invoice.cumulativePaidAmount > 0) {
+      return res.status(400).json({
+        message: "Cannot delete invoice with existing payments"
+      });
+    }
+
+    // Unlink receipts (safety cleanup)
+    await Receipt.updateMany(
+      { invoice: req.params.invoiceId },
+      { $set: { invoice: null } }
+    );
+
+    // Delete invoice
     await Invoice.findByIdAndDelete(req.params.invoiceId);
 
     res.status(200).json({
@@ -308,6 +386,9 @@ exports.deleteInvoice = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      message: "Error deleting invoice",
+      error: error.message
+    });
   }
 };

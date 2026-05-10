@@ -4,9 +4,8 @@ const vendorSchema = new mongoose.Schema(
 {
   vendorCode: {
     type: String,
-    required: true,
     unique: true,
-    trim: true
+    index: true
   },
 
   name: {
@@ -20,23 +19,16 @@ const vendorSchema = new mongoose.Schema(
     trim: true
   },
 
-  email: {
-    type: String,
-    trim: true,
-    lowercase: true
-  },
-
   address: {
     type: String,
     trim: true
   },
 
-  gstNo: {
+  gstNumber: {
     type: String,
-    trim: true,
-    uppercase: true
+    uppercase: true,
+    trim: true
   },
-
   website: {
     type: String,
     trim: true

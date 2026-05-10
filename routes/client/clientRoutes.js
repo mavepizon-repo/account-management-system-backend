@@ -17,5 +17,7 @@ router.delete("/delete/:id", clientController.deleteClient);
 
 router.get("/getByClientnameAndID", clientController.getClientNameAndCode);
 
+router.get("/getAdvanceAmount/:clientId", clientController.getClientAdvance);
+
 
 module.exports = router;

@@ -4,42 +4,51 @@ const clientSchema = new mongoose.Schema(
 {
   clientCode: {
     type: String,
-    unique: true
+    unique: true,
+    index: true,
+    trim: true
   },
 
   name: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
   phone: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
   address: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
   contactPerson: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
   emailid: {
     type: String,
-    required:true,
-    lowercase:true
+    required: true,
+    lowercase: true,
+    trim: true
   },
 
   gstnumber: {
     type: String,
-    required:true,
-    uppercase:true
-  }
+    uppercase: true,
+    trim: true
+  },
+
 },
 { timestamps: true }
 );
+
 
 module.exports = mongoose.model("Client", clientSchema);

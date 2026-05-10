@@ -1,5 +1,5 @@
 const Client = require("../../models/client/Client");
-
+const Receipt = require("../../models/client/Receipt");
 
 // CREATE CLIENT
 exports.createClient = async (req, res) => {
@@ -61,6 +61,35 @@ exports.getClientById = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// get client's advance amount
+exports.getClientAdvance = async (req, res) => {
+  try {
+
+    const result = await Receipt.aggregate([
+      {
+        $match: {
+          client: new mongoose.Types.ObjectId(req.params.clientId),
+          invoice: null,
+          remainingAmount: { $gt: 0 }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalAdvance: { $sum: "$remainingAmount" }
+        }
+      }
+    ]);
+
+    res.json({
+      advance: result.length > 0 ? result[0].totalAdvance : 0
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 

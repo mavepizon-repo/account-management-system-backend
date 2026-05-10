@@ -5,18 +5,21 @@ const receiptSchema = new mongoose.Schema(
   invoice: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Invoice",
-    required: true
+    default: null,   // changed
+    index: true
   },
 
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
-    required: true
+    required: true,
+    index: true
   },
 
-  amountPaid: {
+  paidAmountInReceipt: {
     type: Number,
-    required: true
+    required: true,
+    min: 1
   },
 
   paymentDate: {
@@ -26,16 +29,25 @@ const receiptSchema = new mongoose.Schema(
 
   receiptNumber: {
     type: String,
-    unique: true
+    unique: true,
+    index: true
+  },
+
+  remainingAmount: {
+    type: Number,
+    default: function () {
+      return this.paidAmountInReceipt;
+    }
   },
 
   description: {
     type: String,
+    trim: true,
     default: ""
   },
 
   receiptPdf: {
-    type: String   // path of pdf file
+    type: String
   }
 
 },

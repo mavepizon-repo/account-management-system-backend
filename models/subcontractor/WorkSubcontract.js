@@ -31,12 +31,35 @@ const workSubcontractSchema = new mongoose.Schema({
     default: "Pending"
   },
 
+  // ===============================
+  // AMOUNT DETAILS
+  // ===============================
+
   totalAmount: {
     type: Number,
     required: true
   },
 
-  paidAmount: {
+  gstPercent: {
+    type: Number,
+    default: 0
+  },
+
+  gstAmount: {
+    type: Number,
+    default: 0
+  },
+
+  grandTotal: {
+    type: Number,
+    default: 0
+  },
+
+  // ===============================
+  // PAYMENT DETAILS
+  // ===============================
+
+  cumulativePaidAmount: {
     type: Number,
     default: 0
   },
