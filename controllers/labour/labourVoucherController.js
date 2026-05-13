@@ -578,85 +578,234 @@ exports.createLabourVoucher = async (req, res) => {
     doc.pipe(stream);
 
     // ==========================================
+    // HEADER
+    // ==========================================
+
+    const startX = 50;
+    const startY = 50;
+
+    const logoPath = path.join(
+      __dirname,
+      "../../assets/logo.jpeg"
+    );
+
+    if (fs.existsSync(logoPath)) {
+
+      doc.image(
+        logoPath,
+        startX,
+        startY,
+        { width: 110 }
+      );
+    }
+
+    const rightX = 180;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .text(
+        "DESIGN ART",
+        rightX,
+        startY
+      );
+
+    doc.moveDown(0.5);
+
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .text(
+        "5-6, Indria Nagar, PM Samy Colony, Ratinapuri, Gandhipuram, Coimbatore - 641012",
+        rightX,
+        doc.y,
+        { width: 350 }
+      );
+
+    doc.moveDown(0.3);
+
+    doc.text(
+      "Phone: +91 9677731326 | GST: 33BNCPP2332Q1ZT",
+      rightX,
+      doc.y,
+      { width: 350 }
+    );
+
+    const lineY =
+      Math.max(
+        doc.y + 10,
+        startY + 100
+      );
+
+    doc
+      .moveTo(50, lineY)
+      .lineTo(550, lineY)
+      .stroke();
+
+    // ==========================================
     // TITLE
     // ==========================================
 
     doc
       .fontSize(18)
+      .font("Helvetica-Bold")
       .text(
         "LABOUR SALARY VOUCHER",
-        {
-          align: "center"
-        }
+        0,
+        lineY + 20,
+        { align: "center" }
       );
 
-    doc.moveDown();
-
     // ==========================================
-    // LABOUR DETAILS
+    // INFO BOX
     // ==========================================
 
-    doc.text(
-      `Labour : ${labour.name}`
+    const boxTop = lineY + 60;
+
+    doc
+      .rect(50, boxTop, 500, 140)
+      .stroke();
+
+    doc
+      .fontSize(11)
+      .font("Helvetica");
+
+    let infoY = boxTop + 15;
+
+    const infoRow = (label, value) => {
+
+      doc.text(label, 70, infoY);
+
+      doc.text(
+        value || "-",
+        220,
+        infoY
+      );
+
+      infoY += 20;
+    };
+
+    infoRow(
+      "Labour Name:",
+      labour.name
     );
 
-    doc.text(
-      `Phone : ${labour.phone || "-"}`
+    infoRow(
+      "Phone:",
+      labour.phone || "-"
     );
 
-    doc.text(
-      `From Date : ${fromDate}`
+    infoRow(
+      "Work Type:",
+      labour.workType || "-"
     );
 
-    doc.text(
-      `To Date : ${toDate}`
+    infoRow(
+      "From Date:",
+      fromDate
     );
 
-    doc.moveDown();
+    infoRow(
+      "To Date:",
+      toDate
+    );
+
+    infoRow(
+      "Generated Date:",
+      new Date().toLocaleDateString()
+    );
 
     // ==========================================
-    // SALARY DETAILS
+    // TABLE
     // ==========================================
 
-    doc.text(
-      `Total Working Days : ${totalWorkingDays}`
+    const tableTop =
+      boxTop + 170;
+
+    doc
+      .font("Helvetica-Bold")
+      .text(
+        "Description",
+        70,
+        tableTop
+      )
+      .text(
+        "Value",
+        400,
+        tableTop,
+        { align: "right" }
+      );
+
+    doc
+      .moveTo(50, tableTop + 15)
+      .lineTo(550, tableTop + 15)
+      .stroke();
+
+    doc.font("Helvetica");
+
+    let y = tableTop + 35;
+
+    const row = (label, value) => {
+
+      doc.text(label, 70, y);
+
+      doc.text(
+        String(value),
+        400,
+        y,
+        { align: "right" }
+      );
+
+      y += 25;
+    };
+
+    row(
+      "Total Working Days",
+      totalWorkingDays
     );
 
-    doc.text(
-      `Total Working Hours : ${Number(
-        totalWorkingHours.toFixed(2)
-      )}`
+    row(
+      "Total Working Hours",
+      totalWorkingHours.toFixed(2)
     );
 
-    doc.text(
-      `Overtime Hours : ${Number(
-        overtimeHours.toFixed(2)
-      )}`
+    row(
+      "Overtime Hours",
+      overtimeHours.toFixed(2)
     );
 
-    doc.text(
-      `Total Salary : Rs.${Number(
-        totalSalary.toFixed(2)
-      )}`
+    row(
+      "Total Salary",
+      `Rs. ${totalSalary.toFixed(2)}`
     );
 
-    doc.text(
-      `Advance Deduction : Rs.${Number(
-        deductedAdvanceAmount.toFixed(2)
-      )}`
+    row(
+      "Total Advance Given",
+      `Rs. ${totalAdvanceGiven.toFixed(2)}`
     );
 
-    doc.text(
-      `Remaining Advance : Rs.${Number(
-        remainingAdvanceAmount.toFixed(2)
-      )}`
+    row(
+      "Advance Deduction",
+      `Rs. ${deductedAdvanceAmount.toFixed(2)}`
     );
 
-    doc.text(
-      `Payable Salary : Rs.${Number(
-        payableSalary.toFixed(2)
-      )}`
+    row(
+      "Remaining Advance",
+      `Rs. ${remainingAdvanceAmount.toFixed(2)}`
     );
+
+    doc
+      .font("Helvetica-Bold");
+
+    row(
+      "Payable Salary",
+      `Rs. ${payableSalary.toFixed(2)}`
+    );
+
+    doc
+      .moveTo(50, y)
+      .lineTo(550, y)
+      .stroke();
 
     // ==========================================
     // ADVANCE DETAILS
@@ -664,22 +813,53 @@ exports.createLabourVoucher = async (req, res) => {
 
     if (advanceDetails) {
 
-      doc.moveDown();
+      y += 30;
 
-      doc.fontSize(14).text(
-        "Advance Details"
-      );
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .text(
+          "Advance Details",
+          50,
+          y
+        );
 
-      doc.moveDown(0.5);
+      y += 25;
+
+      doc
+        .font("Helvetica")
+        .fontSize(11);
 
       doc.text(
-        `Deduction Type : ${advanceDetails.deductionType}`
+        `Deduction Type : ${advanceDetails.deductionType}`,
+        70,
+        y
       );
 
+      y += 20;
+
       doc.text(
-        `Deducted Amount : Rs.${advanceDetails.deductedAmount}`
+        `Deducted Amount : Rs.${advanceDetails.deductedAmount}`,
+        70,
+        y
       );
     }
+
+    // ==========================================
+    // FOOTER
+    // ==========================================
+
+    doc
+      .fontSize(11)
+      .text(
+        "This is a system generated labour voucher.",
+        50,
+        730,
+        {
+          align: "center",
+          width: 500
+        }
+      );
 
     doc.end();
 
