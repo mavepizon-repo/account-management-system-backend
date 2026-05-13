@@ -5,6 +5,7 @@ const Voucher = require("../../models/vendor/Voucher");
 
 // CREATE PURCHASE
 exports.createPurchase = async (req, res) => {
+
   try {
 
     const {
@@ -16,154 +17,256 @@ exports.createPurchase = async (req, res) => {
       products = []
     } = req.body;
 
-    // Check if vendor exists
-    const vendorExists = await Vendor.findById(vendor);
+    // ===============================
+    // CHECK VENDOR
+    // ===============================
+
+    const vendorExists =
+      await Vendor.findById(vendor);
 
     if (!vendorExists) {
+
       return res.status(404).json({
         message: "Vendor not found"
       });
+
     }
 
+    // ===============================
+    // ALWAYS START WITH 0
+    // ===============================
 
     const cumulativePaidAmount = 0;
 
-    // AUTO SNO GENERATION
-    const lastPurchase = await Purchase.findOne().sort({ createdAt: -1 });
+    // ===============================
+    // AUTO PURCHASE NUMBER
+    // ===============================
+
+    const lastPurchase =
+      await Purchase.findOne()
+      .sort({ createdAt: -1 });
 
     let sno = "PUR0001";
 
-    if (lastPurchase && lastPurchase.sno) {
-      const num = parseInt(lastPurchase.sno.substring(3)) + 1;
-      sno = "PUR" + String(num).padStart(4, "0");
+    if (
+      lastPurchase &&
+      lastPurchase.sno
+    ) {
+
+      const num =
+        parseInt(
+          lastPurchase.sno.substring(3)
+        ) + 1;
+
+      sno =
+        "PUR" +
+        String(num).padStart(4, "0");
     }
+
+    // ===============================
+    // PROCESS PRODUCTS
+    // ===============================
 
     let totalAmount = 0;
     let totalGST = 0;
     let grandTotal = 0;
 
-    const productList = products.map((item, index) => {
+    const productList = products.map(
+      (item, index) => {
 
-      const amount = item.quantity * item.rate;
-      const gstPercent = item.gstPercent || 0;
-      const gstAmount = (amount * gstPercent) / 100;
-      const netTotal = amount + gstAmount;
+        const amount =
+          item.quantity * item.rate;
 
-      totalAmount += amount;
-      totalGST += gstAmount;
-      grandTotal += netTotal;
+        const gstPercent =
+          item.gstPercent || 0;
 
-      return {
-        serialNo: index + 1,
-        description: item.description,
-        quantity: item.quantity,
-        rate: item.rate,
-        amount,
-        gstPercent,
-        gstAmount,
-        netTotal
-      };
-    });
+        const gstAmount =
+          (amount * gstPercent) / 100;
+
+        const netTotal =
+          amount + gstAmount;
+
+        totalAmount += amount;
+        totalGST += gstAmount;
+        grandTotal += netTotal;
+
+        return {
+
+          serialNo: index + 1,
+
+          description:
+            item.description,
+
+          quantity:
+            item.quantity,
+
+          rate:
+            item.rate,
+
+          amount,
+
+          gstPercent,
+
+          gstAmount,
+
+          netTotal
+        };
+
+      }
+    );
+
+    // ===============================
+    // PAYMENT STATUS
+    // ===============================
+
+    let paymentStatus = "Unpaid";
+
+    // ===============================
+    // CREATE PURCHASE
+    // ===============================
 
     const purchase = new Purchase({
+
       sno,
+
       vendor,
+
       date,
+
       invoiceDate,
+
       subject,
+
       notes,
+
       products: productList,
+
       totalAmount,
+
       totalGST,
+
       grandTotal,
+
       cumulativePaidAmount,
-      paymentStatus: "Unpaid"
+
+      paymentStatus
+
     });
 
-    const savedPurchase = await purchase.save();
+    const savedPurchase =
+      await purchase.save();
 
     // ===============================
-    // ADJUST ADVANCE VOUCHERS
+    // APPLY ADVANCE VOUCHERS
     // ===============================
 
-    let outstandingAmount =
-    savedPurchase.grandTotal - savedPurchase.cumulativePaidAmount;
+    const advanceVouchers =
+      await Voucher.find({
 
-    // Find advance vouchers for this vendor
-    const advanceVouchers = await Voucher.find({
-      vendor: vendor,
-      purchase: null
-    }).sort({ createdAt: 1 });
+        vendor: vendor,
+
+        remainingAmount: { $gt: 0 }
+
+      }).sort({ createdAt: 1 });
+
+    // Outstanding amount in purchase
+    let remaining =
+      savedPurchase.grandTotal;
 
     for (const voucher of advanceVouchers) {
 
-      if (outstandingAmount <= 0) break;
+      if (remaining <= 0) break;
 
-      // Case 1: Voucher fully usable
-      if (voucher.amount <= outstandingAmount) {
+      // usable amount from voucher
+      const applyAmount = Math.min(
+        voucher.remainingAmount,
+        remaining
+      );
 
-        voucher.purchase = savedPurchase._id;
-        await voucher.save();
+      // reduce voucher balance
+      voucher.remainingAmount -= applyAmount;
 
-        outstandingAmount -= voucher.amount;
+      // reduce purchase balance
+      remaining -= applyAmount;
 
-      }
+      // store purchase mapping
+      voucher.appliedPurchases.push({
 
-      // Case 2: Voucher larger than required (split voucher)
-      else {
+        purchase: savedPurchase._id,
 
-        const usedAmount = outstandingAmount;
-        const remainingVoucherAmount = voucher.amount - usedAmount;
+        usedAmount: applyAmount
 
-        // Update existing voucher for purchase
-        voucher.amount = usedAmount;
-        voucher.purchase = savedPurchase._id;
+      });
 
-        await voucher.save();
+      await voucher.save();
 
-        // Create new advance voucher for remaining amount in the old voucher
-        const newVoucher = new Voucher({
-          voucherNumber: voucher.voucherNumber + "-A",
-          vendor: voucher.vendor,
-          receiverType: voucher.receiverType,
-          receiver: voucher.receiver,
-          purpose: voucher.purpose,
-          amount: remainingVoucherAmount,
-          paymentMethod: voucher.paymentMethod,
-          purchase: null,
-          notes: "Advance balance from voucher split"
-        });
-
-        await newVoucher.save();
-
-        outstandingAmount = 0;
-      }
     }
 
-    // Update PURCHASE BILL payment status
-    savedPurchase.cumulativePaidAmount =
-      savedPurchase.grandTotal - outstandingAmount;
+    // ===============================
+    // UPDATE PURCHASE PAID AMOUNT
+    // ===============================
 
-    if (savedPurchase.cumulativePaidAmount === 0)
-      savedPurchase.paymentStatus = "Unpaid";
-    else if (savedPurchase.cumulativePaidAmount < savedPurchase.grandTotal)
-      savedPurchase.paymentStatus = "Partial";
-    else
-      savedPurchase.paymentStatus = "Paid";
+    const paidAmount =
+      savedPurchase.grandTotal -
+      remaining;
+
+    savedPurchase.cumulativePaidAmount =
+      paidAmount;
+
+    // ===============================
+    // UPDATE PAYMENT STATUS
+    // ===============================
+
+    if (paidAmount === 0) {
+
+      savedPurchase.paymentStatus =
+        "Unpaid";
+
+    }
+
+    else if (
+      paidAmount <
+      savedPurchase.grandTotal
+    ) {
+
+      savedPurchase.paymentStatus =
+        "Partial";
+
+    }
+
+    else {
+
+      savedPurchase.paymentStatus =
+        "Paid";
+
+    }
 
     await savedPurchase.save();
 
     res.status(201).json({
-      message: "Purchase Created Successfully",
+
+      message:
+        "Purchase Created Successfully",
+
       data: savedPurchase
+
     });
 
-  } catch (error) {
-    res.status(500).json({
-      message: "Error creating purchase",
-      error: error.message
-    });
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      message:
+        "Error creating purchase",
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 
@@ -284,28 +387,32 @@ exports.getPurchasesByStatusAndVendor = async (req, res) => {
 exports.updatePurchase = async (req, res) => {
   try {
 
-    const { date, invoiceDate, subject, notes } = req.body;
-
-    const updateData = {};
-
-    if (date) updateData.date = date;
-    if (invoiceDate) updateData.invoiceDate = invoiceDate;
-    if (subject) updateData.subject = subject;
-    if (notes) updateData.notes = notes;
+    const {
+      date,
+      invoiceDate,
+      subject,
+      notes
+    } = req.body;
 
     const updatedPurchase = await Purchase.findByIdAndUpdate(
       req.params.purchaseId,
-      { $set: updateData },
       {
-        new: true,
-        runValidators: true
+        date,
+        invoiceDate,
+        subject,
+        notes
+      },
+      {
+        new: true
       }
     ).populate("vendor", "vendorCode name");
 
     if (!updatedPurchase) {
+
       return res.status(404).json({
         message: "Purchase not found"
       });
+
     }
 
     res.status(200).json({
@@ -314,9 +421,11 @@ exports.updatePurchase = async (req, res) => {
     });
 
   } catch (error) {
+
     res.status(500).json({
-      message: error.message
+      error: error.message
     });
+
   }
 };
 
@@ -332,7 +441,11 @@ exports.updatePurchaseProducts = async (req, res) => {
     const purchase = await Purchase.findById(purchaseId);
 
     if (!purchase) {
-      return res.status(404).json({ message: "Purchase not found" });
+
+      return res.status(404).json({
+        message: "Purchase not found"
+      });
+
     }
 
     let totalAmount = 0;
@@ -341,88 +454,94 @@ exports.updatePurchaseProducts = async (req, res) => {
 
     const updatedProducts = products.map((item, index) => {
 
-      const amount = item.quantity * item.rate;
-      const gstPercent = item.gstPercent || 0;
-      const gstAmount = (amount * gstPercent) / 100;
-      const netTotal = amount + gstAmount;
+      const amount =
+        item.quantity * item.rate;
+
+      const gstPercent =
+        item.gstPercent || 0;
+
+      const gstAmount =
+        (amount * gstPercent) / 100;
+
+      const netTotal =
+        amount + gstAmount;
 
       totalAmount += amount;
       totalGST += gstAmount;
       grandTotal += netTotal;
 
       return {
+
         serialNo: index + 1,
+
         description: item.description,
+
         quantity: item.quantity,
+
         rate: item.rate,
+
         amount,
+
         gstPercent,
+
         gstAmount,
+
         netTotal
+
       };
+
     });
 
     purchase.products = updatedProducts;
+
     purchase.totalAmount = totalAmount;
+
     purchase.totalGST = totalGST;
+
     purchase.grandTotal = grandTotal;
 
-     // Prevent overpaid situation
-    const vouchers = await Voucher.find({ purchase: purchase._id }).sort({ createdAt: 1 });
+    // ===============================
+    // VALIDATE PAID AMOUNT
+    // ===============================
 
-    let remainingBillAmount = grandTotal;
-    let newCumulativePaidAmount = 0;
+    if (
+      purchase.cumulativePaidAmount >
+      purchase.grandTotal
+    ) {
 
-    for (const voucher of vouchers) {
+      return res.status(400).json({
+        message:
+          "Purchase total cannot be less than already paid amount"
+      });
 
-      if (remainingBillAmount <= 0) {
-
-        // Entire voucher becomes advance
-        voucher.purchase = null;
-        await voucher.save();
-        continue;
-      }
-
-      if (voucher.amount <= remainingBillAmount) {
-
-        remainingBillAmount -= voucher.amount;
-        newCumulativePaidAmount += voucher.amount;
-
-      } else {
-
-        // Split voucher
-        const usedAmount = remainingBillAmount;
-        const advanceAmount = voucher.amount - usedAmount;
-
-        voucher.amount = usedAmount;
-        await voucher.save();
-
-        const newVoucher = new Voucher({
-          voucherNumber: voucher.voucherNumber + "-SPLIT",
-          vendor: voucher.vendor,
-          receiverType: voucher.receiverType,
-          receiver: voucher.receiver,
-          purpose: "Advance balance after purchase update",
-          amount: advanceAmount,
-          paymentMethod: voucher.paymentMethod,
-          notes: "Auto created advance after purchase reduction"
-        });
-
-        await newVoucher.save();
-
-        newCumulativePaidAmount += usedAmount;
-        remainingBillAmount = 0;
-      }
     }
 
-    purchase.cumulativePaidAmount = newCumulativePaidAmount;
+    // ===============================
+    // RECALCULATE PAYMENT STATUS
+    // ===============================
 
-    if (purchase.cumulativePaidAmount === 0)
+    if (
+      purchase.cumulativePaidAmount === 0
+    ) {
+
       purchase.paymentStatus = "Unpaid";
-    else if (purchase.cumulativePaidAmount < grandTotal)
+
+    }
+
+    else if (
+      purchase.cumulativePaidAmount <
+      purchase.grandTotal
+    ) {
+
       purchase.paymentStatus = "Partial";
-    else
+
+    }
+
+    else {
+
       purchase.paymentStatus = "Paid";
+
+    }
 
     await purchase.save();
 
@@ -432,10 +551,12 @@ exports.updatePurchaseProducts = async (req, res) => {
     });
 
   } catch (error) {
+
     res.status(500).json({
       message: "Error updating products",
       error: error.message
     });
+
   }
 };
 
@@ -445,34 +566,70 @@ exports.updatePurchaseProducts = async (req, res) => {
 exports.deletePurchase = async (req, res) => {
   try {
 
-    const purchase = await Purchase.findById(req.params.purchaseId);
+    const purchase = await Purchase.findById(
+      req.params.purchaseId
+    );
 
     if (!purchase) {
-      return res.status(404).json({ message: "Purchase not found" });
+
+      return res.status(404).json({
+        message: "Purchase not found"
+      });
+
     }
 
     // ===============================
-    // REVERT VOUCHERS TO ADVANCE
+    // PREVENT DELETE IF PAYMENT EXISTS
     // ===============================
 
-    const vouchers = await Voucher.find({ purchase: purchase._id });
+    if (purchase.cumulativePaidAmount > 0) {
 
-    for (const voucher of vouchers) {
-      voucher.purchase = null;
-      await voucher.save();
+      return res.status(400).json({
+        message:
+          "Cannot delete purchase with existing payments"
+      });
+
     }
+
+    // ===============================
+    // UNLINK VOUCHERS
+    // ===============================
+
+    await Voucher.updateMany(
+      {
+        "appliedPurchases.purchase":
+          req.params.purchaseId
+      },
+      {
+        $pull: {
+          appliedPurchases: {
+            purchase:
+              req.params.purchaseId
+          }
+        }
+      }
+    );
 
     // ===============================
     // DELETE PURCHASE
     // ===============================
 
-    await Purchase.findByIdAndDelete(req.params.purchaseId);
+    await Purchase.findByIdAndDelete(
+      req.params.purchaseId
+    );
 
     res.status(200).json({
-      message: "Purchase Deleted Successfully"
+      message:
+        "Purchase Deleted Successfully"
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    res.status(500).json({
+      message:
+        "Error deleting purchase",
+      error: error.message
+    });
+
   }
 };

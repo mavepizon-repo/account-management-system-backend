@@ -2,12 +2,19 @@ const mongoose = require("mongoose");
 
 const receiptSchema = new mongoose.Schema(
 {
-  invoice: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Invoice",
-    default: null,   // changed
-    index: true
-  },
+  appliedInvoices: [
+    {
+      invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Invoice"
+      },
+
+      usedAmount: {
+        type: Number,
+        default: 0
+      }
+    }
+  ],
 
   client: {
     type: mongoose.Schema.Types.ObjectId,

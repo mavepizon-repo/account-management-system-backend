@@ -44,10 +44,35 @@ exports.createReceipt = async (req, res) => {
       client = await Client.findById(clientId);
 
       if (!client) {
-        return res.status(404).json({ message: "Client not found" });
+        return res.status(404).json({
+          message: "Client not found"
+        });
       }
 
-    } else {
+      // ===============================
+      // CHECK PENDING INVOICE
+      // ===============================
+
+      const pendingInvoice = await Invoice.findOne({
+        client: client._id,
+        paymentStatus: { $in: ["Unpaid", "Partial"] }
+      });
+
+      if (pendingInvoice) {
+
+        const pendingAmount =
+          pendingInvoice.grandTotal -
+          pendingInvoice.cumulativePaidAmount;
+
+        return res.status(400).json({
+          message:
+            `Pending invoice amount Rs.${pendingAmount} exists for this client. Please pay the invoice directly instead of creating advance receipt.`
+        });
+      }
+
+    }
+    
+    else {
 
       return res.status(400).json({
         message: "Either invoiceId or clientId is required"
@@ -68,8 +93,9 @@ exports.createReceipt = async (req, res) => {
       const remainingAmount = invoice.grandTotal - invoice.cumulativePaidAmount;
       // newly paid amount is 'paidAmountInReceipt'
       if (paidAmountInReceipt > remainingAmount) {
-
+        // calculate advance amount
         advanceAmount = paidAmountInReceipt - remainingAmount;
+        // assume 
         newcumulativePaidAmount = invoice.grandTotal;
 
       } else {
@@ -111,7 +137,7 @@ exports.createReceipt = async (req, res) => {
     // TEMP PDF PATH
     // ===============================
 
-    const uploadDir = path.join(__dirname, "../uploads");
+    const uploadDir = path.join(__dirname, "../../uploads");
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -285,16 +311,31 @@ exports.createReceipt = async (req, res) => {
           folder: "receipts"
         });
 
+
         const receipt = new Receipt({
-          invoice: invoice ? invoice._id : null,
-          client: client._id,
-          paidAmountInReceipt,
-          remainingAmount: invoice ? 0 : paidAmountInReceipt,
-          description,
-          receiptNumber,
-          receiptPdf: result.secure_url,
-          paymentDate: new Date()
-        });
+
+        client: client._id,
+        paidAmountInReceipt,
+        appliedInvoices:
+          invoice
+            ? [
+                {
+                  invoice: invoice._id,
+                  usedAmount:
+                    paidAmountInReceipt - advanceAmount
+                }
+              ]
+            : [],
+        // if invoice is connected then remaining amount from this receipt amount is
+        // advance amount(which is calculated above like total receipt amount - amount used in invoice)
+        // otherwise it is advance receipt..so it will be 'paid amount in Receipt'
+        remainingAmount:invoice ? advanceAmount : paidAmountInReceipt,
+        description,
+        receiptNumber,
+        receiptPdf: result.secure_url,
+        paymentDate: new Date()
+      });
+
 
         const savedReceipt = await receipt.save();
 
@@ -329,7 +370,7 @@ exports.getAllReceipts = async (req, res) => {
 
     const receipts = await Receipt.find()
     .populate("client", "name clientCode")
-    .populate("invoice", "invoiceNumber grandTotal cumulativePaidAmount paymentStatus")
+    .populate("appliedInvoices.invoice","invoiceNumber grandTotal cumulativePaidAmount paymentStatus")
     .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -346,9 +387,9 @@ exports.getReceiptsByInvoiceId = async (req, res) => {
 
   try {
 
-    const receipts = await Receipt.find({ invoice: req.params.invoiceId })
+    const receipts = await Receipt.find({"appliedInvoices.invoice": req.params.invoiceId})
       .populate("client", "name clientCode")
-      .populate("invoice", "project grandTotal");
+      .populate("appliedInvoices.invoice","invoiceNumber grandTotal");
 
     if (receipts.length === 0) {
       return res.status(404).json({
@@ -371,7 +412,7 @@ exports.getReceiptsByClientId = async (req, res) => {
 
     const receipts = await Receipt.find({ client: req.params.clientId })
       .populate("client", "name clientCode")
-      .populate("invoice", "project grandTotal");
+      .populate("appliedInvoices.invoice","invoiceNumber grandTotal");
 
     if (receipts.length === 0) {
       return res.status(404).json({
@@ -393,7 +434,7 @@ exports.getReceiptById = async (req, res) => {
 
     const receipt = await Receipt.findById(req.params.id)
       .populate("client", "name clientCode")
-      .populate("invoice", "project grandTotal cumulativePaidAmount");
+      .populate("appliedInvoices.invoice","invoiceNumber grandTotal cumulativePaidAmount");
 
     if (!receipt) {
       return res.status(404).json({
@@ -415,62 +456,61 @@ exports.getReceiptById = async (req, res) => {
 exports.updateReceipt = async (req, res) => {
   try {
 
-   const receipt = await Receipt.findById(req.params.id)
-  .populate("client")
-  .populate("invoice");
+    const receipt = await Receipt.findById(req.params.id)
+    .populate("client")
+    .populate("appliedInvoices.invoice");
 
     if (!receipt) {
-      return res.status(404).json({ message: "Receipt not found" });
+      return res.status(404).json({
+        message: "Receipt not found"
+      });
     }
 
-    const invoice = receipt.invoice;
+    const invoiceConnected = receipt.appliedInvoices && receipt.appliedInvoices.length > 0;
 
     // ===============================
-    // UPDATE AMOUNT
+    // RESTRICT FINANCIAL FIELD EDITS
+    // ===============================
+
+    if (
+      invoiceConnected &&
+      (
+        req.body.paidAmountInReceipt !== undefined ||
+        req.body.client !== undefined
+      )
+    ) {
+
+      return res.status(400).json({
+        message:
+          "This receipt is already connected with invoice(s). Amount and client cannot be edited."
+      });
+    }
+
+    // ===============================
+    // UPDATE AMOUNT (ONLY ADVANCE)
     // ===============================
 
     if (req.body.paidAmountInReceipt !== undefined) {
 
-      const newAmount = Number(req.body.paidAmountInReceipt);
+      const newAmount = Number(
+        req.body.paidAmountInReceipt
+      );
 
       if (newAmount <= 0) {
+
         return res.status(400).json({
-          message: "Amount must be greater than 0"
+          message:
+            "Amount must be greater than 0"
         });
       }
 
-      // Update receipt amount first
-      receipt.paidAmountInReceipt = newAmount;
+      receipt.paidAmountInReceipt =
+        newAmount;
 
-      if (!invoice) {
-        receipt.remainingAmount = newAmount;
-      }
+      receipt.remainingAmount =
+        newAmount;
+
       await receipt.save();
-
-      // If receipt is linked to invoice
-      if (invoice) {
-
-        // Recalculate total paid from all receipts
-        const receipts = await Receipt.find({ invoice: invoice._id });
-
-        invoice.cumulativePaidAmount = receipts.reduce(
-          (sum, r) => sum + r.paidAmountInReceipt,
-          0
-        );
-
-        // Payment status update
-        if (invoice.cumulativePaidAmount === 0) {
-          invoice.paymentStatus = "Unpaid";
-        }
-        else if (invoice.cumulativePaidAmount < invoice.grandTotal) {
-          invoice.paymentStatus = "Partial";
-        }
-        else {
-          invoice.paymentStatus = "Paid";
-        }
-
-        await invoice.save();
-      }
     }
 
     // ===============================
@@ -478,44 +518,72 @@ exports.updateReceipt = async (req, res) => {
     // ===============================
 
     if (req.body.paymentDate !== undefined) {
-      receipt.paymentDate = new Date(req.body.paymentDate);
+
+      receipt.paymentDate =
+        new Date(req.body.paymentDate);
     }
 
     if (req.body.description !== undefined) {
-      receipt.description = req.body.description;
+
+      receipt.description =
+        req.body.description;
     }
 
     await receipt.save();
 
     // ===============================
-    // PDF GENERATION (ONLY IF INVOICE)
+    // PDF GENERATION
     // ===============================
 
-    const receiptNumber = receipt.receiptNumber;
+    const receiptNumber =
+      receipt.receiptNumber;
 
-    const uploadDir = path.join(__dirname, "../../uploads");
+    const uploadDir = path.join(
+      __dirname,
+      "../../uploads"
+    );
 
     if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+
+      fs.mkdirSync(uploadDir, {
+        recursive: true
+      });
     }
 
-    const pdfPath = path.join(uploadDir, `${receiptNumber}.pdf`);
+    const pdfPath = path.join(
+      uploadDir,
+      `${receiptNumber}.pdf`
+    );
 
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({
+      margin: 50
+    });
 
-    const stream = fs.createWriteStream(pdfPath);
+    const stream =
+      fs.createWriteStream(pdfPath);
 
     doc.pipe(stream);
 
+    // ===============================
     // HEADER
+    // ===============================
 
     const startX = 50;
     const startY = 50;
 
-    const logoPath = path.join(__dirname, "../../assets/logo.jpeg");
+    const logoPath = path.join(
+      __dirname,
+      "../../assets/logo.jpeg"
+    );
 
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, startX, startY, { width: 110 });
+
+      doc.image(
+        logoPath,
+        startX,
+        startY,
+        { width: 110 }
+      );
     }
 
     const rightX = 180;
@@ -523,7 +591,11 @@ exports.updateReceipt = async (req, res) => {
     doc
       .font("Helvetica-Bold")
       .fontSize(16)
-      .text("DESIGN ART", rightX, startY);
+      .text(
+        "DESIGN ART",
+        rightX,
+        startY
+      );
 
     doc.moveDown(0.5);
 
@@ -546,68 +618,147 @@ exports.updateReceipt = async (req, res) => {
       { width: 350 }
     );
 
-    const lineY = Math.max(doc.y + 10, startY + 100);
+    const lineY = Math.max(
+      doc.y + 10,
+      startY + 100
+    );
 
-    doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
+    doc
+      .moveTo(50, lineY)
+      .lineTo(550, lineY)
+      .stroke();
 
+    // ===============================
     // TITLE
+    // ===============================
 
     doc
       .fontSize(18)
       .font("Helvetica-Bold")
-      .text("PAYMENT RECEIPT", 0, lineY + 20, { align: "center" });
+      .text(
+        "PAYMENT RECEIPT",
+        0,
+        lineY + 20,
+        { align: "center" }
+      );
 
+    // ===============================
     // INFO BOX
+    // ===============================
 
     const boxTop = lineY + 60;
 
-    doc.rect(50, boxTop, 500, 120).stroke();
+    doc
+      .rect(50, boxTop, 500, 120)
+      .stroke();
 
-    doc.fontSize(11).font("Helvetica");
+    doc
+      .fontSize(11)
+      .font("Helvetica");
 
     let infoY = boxTop + 15;
 
     const infoRow = (label, value) => {
+
       doc.text(label, 70, infoY);
-      doc.text(value || "-", 200, infoY);
+
+      doc.text(
+        value || "-",
+        200,
+        infoY
+      );
+
       infoY += 20;
     };
 
-    infoRow("Receipt Number:", receiptNumber);
+    infoRow(
+      "Receipt Number:",
+      receiptNumber
+    );
+
     infoRow(
       "Invoice Number:",
-      invoice ? (invoice.invoiceNumber || invoice._id.toString()) : "Advance Payment"
+      invoice
+        ? (
+            invoice.invoiceNumber ||
+            invoice._id.toString()
+          )
+        : "Advance Payment"
     );
-    infoRow("Date:", new Date(receipt.paymentDate).toLocaleDateString());
-    infoRow("Client Name:", receipt.client?.name || "No Client");
-    infoRow("Description:", receipt.description || "Payment received");
 
+    infoRow(
+      "Date:",
+      new Date(
+        receipt.paymentDate
+      ).toLocaleDateString()
+    );
+
+    infoRow(
+      "Client Name:",
+      receipt.client?.name ||
+      "No Client"
+    );
+
+    infoRow(
+      "Description:",
+      receipt.description ||
+      "Payment received"
+    );
+
+    // ===============================
     // TABLE
+    // ===============================
 
     const tableTop = boxTop + 150;
 
     doc
       .font("Helvetica-Bold")
-      .text("Description", 70, tableTop)
-      .text("Amount (Rs.)", 400, tableTop, { align: "right" });
+      .text(
+        "Description",
+        70,
+        tableTop
+      )
+      .text(
+        "Amount (Rs.)",
+        400,
+        tableTop,
+        { align: "right" }
+      );
 
-    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+    doc
+      .moveTo(50, tableTop + 15)
+      .lineTo(550, tableTop + 15)
+      .stroke();
 
     doc.font("Helvetica");
 
     let y = tableTop + 35;
 
     const row = (label, value) => {
+
       doc.text(label, 70, y);
-      doc.text(`Rs. ${Number(value).toFixed(2)}`, 400, y, { align: "right" });
+
+      doc.text(
+        `Rs. ${Number(value).toFixed(2)}`,
+        400,
+        y,
+        { align: "right" }
+      );
+
       y += 25;
     };
 
     if (invoice) {
 
-      row("Invoice Total", invoice.grandTotal);
+      row(
+        "Invoice Total",
+        invoice.grandTotal
+      );
 
-      row("Amount Paid", receipt.paidAmountInReceipt);
+      row(
+        "Amount Paid",
+        receipt.paidAmountInReceipt
+      );
 
       row(
         "Total Paid Till Now",
@@ -617,31 +768,53 @@ exports.updateReceipt = async (req, res) => {
       row(
         "Remaining Balance",
         Math.max(
-          invoice.grandTotal - invoice.cumulativePaidAmount,
+          invoice.grandTotal -
+          invoice.cumulativePaidAmount,
           0
         )
-);
+      );
     }
-    else{
-      row("Advance Payment", receipt.paidAmountInReceipt);
-    }
-    doc.moveTo(50, y).lineTo(550, y).stroke();
 
+    else {
+
+      row(
+        "Advance Payment",
+        receipt.paidAmountInReceipt
+      );
+    }
+
+    doc
+      .moveTo(50, y)
+      .lineTo(550, y)
+      .stroke();
+
+    // ===============================
     // FOOTER
+    // ===============================
 
     doc
       .fontSize(11)
-      .text("Thank you for your payment!", 50, y + 40, {
-        align: "center",
-        width: 500
-      });
+      .text(
+        "Thank you for your payment!",
+        50,
+        y + 40,
+        {
+          align: "center",
+          width: 500
+        }
+      );
 
     doc
       .fontSize(9)
-      .text("This is a system generated receipt.", 50, y + 60, {
-        align: "center",
-        width: 500
-      });
+      .text(
+        "This is a system generated receipt.",
+        50,
+        y + 60,
+        {
+          align: "center",
+          width: 500
+        }
+      );
 
     doc.end();
 
@@ -653,21 +826,27 @@ exports.updateReceipt = async (req, res) => {
 
       try {
 
-        const result = await cloudinary.uploader.upload(pdfPath, {
-          resource_type: "raw",
-          folder: "receipts",
-          public_id: receiptNumber,
-          overwrite: true
-        });
+        const result =
+          await cloudinary.uploader.upload(
+            pdfPath,
+            {
+              resource_type: "raw",
+              folder: "receipts",
+              public_id: receiptNumber,
+              overwrite: true
+            }
+          );
 
-        receipt.receiptPdf = result.secure_url;
+        receipt.receiptPdf =
+          result.secure_url;
 
         await receipt.save();
 
         fs.unlinkSync(pdfPath);
 
         res.status(200).json({
-          message: "Receipt updated successfully",
+          message:
+            "Receipt updated successfully",
           receipt,
           invoice
         });
@@ -675,21 +854,24 @@ exports.updateReceipt = async (req, res) => {
       } catch (err) {
 
         res.status(500).json({
-          error: "Cloudinary upload failed",
+          error:
+            "Cloudinary upload failed",
           details: err.message
         });
-
       }
-
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 };
 
 
 exports.deleteReceipt = async (req, res) => {
+
   try {
 
     const receipt = await Receipt.findById(req.params.id);
@@ -700,40 +882,38 @@ exports.deleteReceipt = async (req, res) => {
       });
     }
 
-    const invoice = await Invoice.findById(receipt.invoice);
+    // ===============================
+    // PREVENT DELETE IF CONNECTED
+    // ===============================
 
-    // Delete receipt first
-    await receipt.deleteOne();
+    const invoiceConnected =
+      receipt.appliedInvoices &&
+      receipt.appliedInvoices.length > 0;
 
-    if (invoice) {
+    if (invoiceConnected) {
 
-      // Recalculate total paid from remaining receipts
-      const receipts = await Receipt.find({ invoice: invoice._id });
-
-      invoice.cumulativePaidAmount = receipts.reduce(
-        (sum, r) => sum + r.paidAmountInReceipt,
-        0
-      );
-
-      // Update payment status
-      if (invoice.cumulativePaidAmount === 0) {
-        invoice.paymentStatus = "Unpaid";
-      }
-      else if (invoice.cumulativePaidAmount < invoice.grandTotal) {
-        invoice.paymentStatus = "Partial";
-      }
-      else {
-        invoice.paymentStatus = "Paid";
-      }
-
-      await invoice.save();
+      return res.status(400).json({
+        message:
+          "This receipt is already connected with invoice(s). It cannot be deleted."
+      });
     }
+
+    // ===============================
+    // DELETE ADVANCE RECEIPT ONLY
+    // ===============================
+
+    await receipt.deleteOne();
 
     res.status(200).json({
       message: "Receipt deleted successfully"
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    res.status(500).json({
+      error: error.message
+    });
+
   }
+
 };

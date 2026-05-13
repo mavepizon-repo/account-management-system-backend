@@ -10,11 +10,13 @@ const workSubcontractSchema = new mongoose.Schema({
 
   projectName: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
   description: {
-    type: String
+    type: String,
+    default: ""
   },
 
   startDate: {
@@ -27,7 +29,12 @@ const workSubcontractSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ["Pending", "In Progress", "Completed", "On Hold"],
+    enum: [
+      "Pending",
+      "In Progress",
+      "Completed",
+      "On Hold"
+    ],
     default: "Pending"
   },
 
@@ -37,22 +44,26 @@ const workSubcontractSchema = new mongoose.Schema({
 
   totalAmount: {
     type: Number,
-    required: true
+    required: true,
+    min: 0
   },
 
   gstPercent: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   gstAmount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   grandTotal: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   // ===============================
@@ -61,12 +72,14 @@ const workSubcontractSchema = new mongoose.Schema({
 
   cumulativePaidAmount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   balanceAmount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
 
   paymentStatus: {
@@ -75,6 +88,13 @@ const workSubcontractSchema = new mongoose.Schema({
     default: "Unpaid"
   }
 
-}, { timestamps: true });
+}, {
+  timestamps: true
+});
 
-module.exports = mongoose.model("WorkSubcontract", workSubcontractSchema);
+module.exports = mongoose.model(
+  "WorkSubcontract",
+  workSubcontractSchema
+);
+
+

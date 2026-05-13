@@ -4,20 +4,69 @@ const voucherSchema = new mongoose.Schema({
 
   voucherNumber: {
     type: String,
-    unique: true
+    unique: true,
+    trim: true
   },
+
+  // =====================================================
+  // VENDOR FLOW
+  // =====================================================
 
   vendor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Vendor",
-    default: null
+    default: null,
+    index: true
   },
+
+  appliedPurchases: {
+    type: [
+      {
+        purchase: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Purchase"
+        },
+
+        usedAmount: {
+          type: Number,
+          default: 0
+        }
+      }
+    ],
+    default: []
+  },
+
+  // =====================================================
+  // SUBCONTRACT FLOW
+  // =====================================================
 
   subcontract: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Subcontract",
-    default: null
+    default: null,
+    index: true
   },
+
+  appliedWorkSubcontracts: {
+    type: [
+      {
+        workSubcontract: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "WorkSubcontract"
+        },
+
+        usedAmount: {
+          type: Number,
+          default: 0
+        }
+      }
+    ],
+    default: []
+  },
+
+  // =====================================================
+  // RECEIVER DETAILS
+  // =====================================================
 
   receiverType: {
     type: String,
@@ -28,34 +77,39 @@ const voucherSchema = new mongoose.Schema({
   receiver: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    refPath: "receiverType"
+    refPath: "receiverType",
+    index: true
   },
 
-  purchase: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Purchase",
-    default: null
-  },
-
-  workSubcontract: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "WorkSubcontract",
-    default: null
-  },
+  // =====================================================
+  // PAYMENT DETAILS
+  // =====================================================
 
   date: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
 
   purpose: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
 
-  amount: {
+  amountInVoucher: {
     type: Number,
-    required: true
+    required: true,
+    min: 0
+  },
+
+  // Remaining advance amount available
+  remainingAmount: {
+    type: Number,
+    default: function () {
+      return this.amountInVoucher;
+    },
+    min: 0
   },
 
   paymentMethod: {
@@ -66,15 +120,21 @@ const voucherSchema = new mongoose.Schema({
 
   notes: {
     type: String,
-    default: ""
+    default: "",
+    trim: true
   },
 
+  // =====================================================
+  // PDF
+  // =====================================================
+
   pdfUrl: {
-    type: String
+    type: String,
+    default: ""
   }
 
-}, { timestamps: true });
+}, {
+  timestamps: true
+});
 
 module.exports = mongoose.model("Voucher", voucherSchema);
-
-

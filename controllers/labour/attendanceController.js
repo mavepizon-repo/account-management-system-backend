@@ -13,7 +13,7 @@ const calculateHours = (start, end) => {
 
   let diff = (endMin - startMin) / 60;
 
-  if (diff < 0) diff = 0;
+  if (diff < 0) throw new Error("End time must be greater than start time");
 
   const totalHours = Number(diff.toFixed(2));
   const overtimeHours =
@@ -38,12 +38,17 @@ exports.createAttendance = async (req, res) => {
 
       if (!labourData) continue;
 
-      const selectedDate = new Date(date);
-      selectedDate.setHours(0, 0, 0, 0);
+      const [year, month, day] =
+        date.split("-").map(Number);
+
+      const selectedDate =
+        new Date(Date.UTC(year, month - 1, day));
+  
 
       const nextDate = new Date(selectedDate);
-      nextDate.setDate(nextDate.getDate() + 1);
-
+        nextDate.setUTCDate(
+          nextDate.getUTCDate() + 1
+        );
       const exists = await Attendance.findOne({
         labour: labourData._id,
         date: { $gte: selectedDate, $lt: nextDate }
@@ -165,37 +170,78 @@ exports.getAttendanceByLabour = async (req, res) => {
 // =========================
 exports.updateAttendance = async (req, res) => {
   try {
+
     const { startTime, endTime, siteName } = req.body;
+
+    // =========================
+    // FIND EXISTING ATTENDANCE
+    // =========================
+
+    const attendance =
+      await Attendance.findById(req.params.id);
+
+    if (!attendance) {
+
+      return res.status(404).json({
+        message: "Attendance not found"
+      });
+
+    }
 
     const updateData = {};
 
-    // ✅ Optional updates
-    if (siteName) updateData.siteName = siteName;
+    // =========================
+    // SITE NAME
+    // =========================
 
-    if (startTime && endTime) {
-      const { totalHours, overtimeHours } =
-        calculateHours(startTime, endTime);
-
-      updateData.startTime = startTime;
-      updateData.endTime = endTime;
-      updateData.totalHours = totalHours;
-      updateData.overtimeHours = overtimeHours;
+    if (siteName !== undefined) {
+      updateData.siteName = siteName;
     }
 
-    const updated = await Attendance.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
+    // =========================
+    // USE OLD VALUES IF NEW NOT GIVEN
+    // =========================
 
-    if (!updated) {
-      return res.status(404).json({ message: "Attendance not found" });
-    }
+    const newStartTime =
+      startTime || attendance.startTime;
+
+    const newEndTime =
+      endTime || attendance.endTime;
+
+    // =========================
+    // RECALCULATE HOURS
+    // =========================
+
+    const { totalHours, overtimeHours } =
+      calculateHours(newStartTime, newEndTime);
+
+    updateData.startTime = newStartTime;
+
+    updateData.endTime = newEndTime;
+
+    updateData.totalHours = totalHours;
+
+    updateData.overtimeHours = overtimeHours;
+
+    // =========================
+    // UPDATE
+    // =========================
+
+    const updated =
+      await Attendance.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true }
+      );
 
     res.json(updated);
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message
+    });
+
   }
 };
 
@@ -262,7 +308,8 @@ const generateMonthlyReport = async (month, year) => {
       const totalHours = item.totalHours || 0;
       const totalOvertime = item.totalOvertime || 0;
 
-      const normalSalary = totalHours * perHour;
+      const normalHours = totalHours - totalOvertime;
+      const normalSalary = normalHours * perHour;
       const overtimeSalary = totalOvertime * perHour;
 
       const totalSalary = normalSalary + overtimeSalary;

@@ -1,5 +1,11 @@
 const Labour = require("../../models/labour/Labour");
 
+const Attendance = require("../../models/labour/Attendance");
+
+const AdvancePayment = require("../../models/labour/AdvancePayment");
+
+const LabourVoucher = require("../../models/labour/LabourVoucher");
+
 
 // CREATE labour
 exports.createlabour = async (req, res) => {
@@ -92,21 +98,100 @@ exports.updatelabour = async (req, res) => {
 };
 
 
+// ===============================
+// DELETE LABOUR
+// ===============================
 
-// DELETE labour
 exports.deletelabour = async (req, res) => {
   try {
 
-    const labour = await Labour.findByIdAndDelete(req.params.id);
+    const labour = await Labour.findById(
+      req.params.id
+    );
 
     if (!labour) {
-      return res.status(404).json({ message: "labour not found" });
+
+      return res.status(404).json({
+        message: "Labour not found"
+      });
+
     }
 
-    res.json({ message: "labour deleted successfully" });
+    // ===============================
+    // CHECK ATTENDANCE
+    // ===============================
+
+    const attendanceExists =
+      await Attendance.findOne({
+        labour: req.params.id
+      });
+
+    if (attendanceExists) {
+
+      return res.status(400).json({
+        message:
+          "Cannot delete labour with attendance records"
+      });
+
+    }
+
+    // ===============================
+    // CHECK ADVANCE PAYMENTS
+    // ===============================
+
+    const advanceExists =
+      await AdvancePayment.findOne({
+        labour: req.params.id
+      });
+
+    if (advanceExists) {
+
+      return res.status(400).json({
+        message:
+          "Cannot delete labour with advance payments"
+      });
+
+    }
+
+    // ===============================
+    // CHECK VOUCHERS
+    // ===============================
+
+    const voucherExists =
+      await LabourVoucher.findOne({
+        labour: req.params.id
+      });
+
+    if (voucherExists) {
+
+      return res.status(400).json({
+        message:
+          "Cannot delete labour with vouchers"
+      });
+
+    }
+
+    // ===============================
+    // DELETE LABOUR
+    // ===============================
+
+    await Labour.findByIdAndDelete(
+      req.params.id
+    );
+
+    res.status(200).json({
+
+      message:
+        "Labour deleted successfully"
+
+    });
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message
+    });
+
   }
 };
 

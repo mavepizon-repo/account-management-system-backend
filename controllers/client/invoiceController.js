@@ -80,28 +80,31 @@ exports.createInvoice = async (req, res) => {
     // APPLY ADVANCE RECEIPTS
     // ===============================
 
+    // fetch all the receipt which has remainingAmount is >0
     const advanceReceipts = await Receipt.find({
       client: client,
-      invoice: null,
       remainingAmount: { $gt: 0 }
     }).sort({ paymentDate: 1 });
 
+    // 'remaining' means outstanding amount in Invoice
     let remaining = savedInvoice.grandTotal;
 
     for (const r of advanceReceipts) {
 
       if (remaining <= 0) break;
-
+      
+      // 'remainigAmount' means rest amount in receipt
       const applyAmount = Math.min(r.remainingAmount, remaining);
 
       r.remainingAmount -= applyAmount;
 
       remaining -= applyAmount;
 
-      // if receipt fully consumed
-      if (r.remainingAmount === 0) {
-        r.invoice = savedInvoice._id;
-      }
+      // store invoice mapping
+      r.appliedInvoices.push({
+        invoice: savedInvoice._id,
+        usedAmount: applyAmount
+      });
 
       await r.save();
     }

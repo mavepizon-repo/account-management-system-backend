@@ -3,8 +3,8 @@ const Voucher = require("../../models/vendor/Voucher");
 const Subcontract = require("../../models/subcontractor/Subcontract");
 
 
-
 exports.createWork = async (req, res) => {
+
   try {
 
     const {
@@ -17,13 +17,19 @@ exports.createWork = async (req, res) => {
       gstPercent = 0
     } = req.body;
 
+    // ===============================
     // CHECK SUBCONTRACT
-    const subcontractExists = await Subcontract.findById(subcontract);
+    // ===============================
+
+    const subcontractExists =
+      await Subcontract.findById(subcontract);
 
     if (!subcontractExists) {
+
       return res.status(404).json({
         message: "Subcontract not found"
       });
+
     }
 
     // ===============================
@@ -36,316 +42,440 @@ exports.createWork = async (req, res) => {
     const grandTotal =
       Number(totalAmount) + gstAmount;
 
+    // ===============================
+    // DEFAULT PAYMENT VALUES
+    // ===============================
+
     const cumulativePaidAmount = 0;
 
     const balanceAmount = grandTotal;
 
     // ===============================
-    // CREATE WORK
+    // CREATE WORK SUBCONTRACT
     // ===============================
 
     const work = new WorkSubcontract({
+
       subcontract,
+
       projectName,
+
       description,
+
       startDate,
+
       endDate,
 
       totalAmount,
+
       gstPercent,
+
       gstAmount,
+
       grandTotal,
 
       cumulativePaidAmount,
+
       balanceAmount,
+
       paymentStatus: "Unpaid"
+
     });
 
-    const savedWork = await work.save();
+    const savedWork =
+      await work.save();
 
     // ===============================
     // APPLY ADVANCE VOUCHERS
     // ===============================
 
-    let outstandingAmount =
-      savedWork.grandTotal;
+    const advanceVouchers =
+      await Voucher.find({
 
-    const advanceVouchers = await Voucher.find({
-      subcontract,
-      workSubcontract: null
-    }).sort({ createdAt: 1 });
+        subcontract: subcontract,
+
+        remainingAmount: { $gt: 0 }
+
+      }).sort({ createdAt: 1 });
+
+    // Outstanding amount in work
+    let remaining =
+      savedWork.grandTotal;
 
     for (const voucher of advanceVouchers) {
 
-      if (outstandingAmount <= 0) break;
+      if (remaining <= 0) break;
 
-      // FULL VOUCHER USE
-      if (voucher.amount <= outstandingAmount) {
+      // usable amount from voucher
+      const applyAmount = Math.min(
+        voucher.remainingAmount,
+        remaining
+      );
 
-        voucher.workSubcontract = savedWork._id;
+      // reduce voucher balance
+      voucher.remainingAmount -= applyAmount;
 
-        await voucher.save();
+      // reduce work balance
+      remaining -= applyAmount;
 
-        outstandingAmount -= voucher.amount;
-      }
+      // store work mapping
+      voucher.appliedWorkSubcontracts.push({
 
-      // SPLIT VOUCHER
-      else {
+        workSubcontract: savedWork._id,
 
-        const usedAmount = outstandingAmount;
+        usedAmount: applyAmount
 
-        const remainingVoucherAmount =
-          voucher.amount - usedAmount;
+      });
 
-        voucher.amount = usedAmount;
+      await voucher.save();
 
-        voucher.workSubcontract = savedWork._id;
-
-        await voucher.save();
-
-        // CREATE NEW ADVANCE VOUCHER
-        const newVoucher = new Voucher({
-          voucherNumber: voucher.voucherNumber + "-A",
-
-          subcontract: voucher.subcontract,
-
-          receiverType: voucher.receiverType,
-          receiver: voucher.receiver,
-
-          purpose: voucher.purpose,
-
-          amount: remainingVoucherAmount,
-
-          paymentMethod: voucher.paymentMethod,
-
-          workSubcontract: null,
-
-          notes: "Advance balance from voucher split"
-        });
-
-        await newVoucher.save();
-
-        outstandingAmount = 0;
-      }
     }
+
+    // ===============================
+    // UPDATE WORK PAID AMOUNT
+    // ===============================
+
+    const paidAmount =
+      savedWork.grandTotal - remaining;
+
+    savedWork.cumulativePaidAmount =
+      paidAmount;
+
+    savedWork.balanceAmount =
+      remaining;
 
     // ===============================
     // UPDATE PAYMENT STATUS
     // ===============================
 
-    savedWork.cumulativePaidAmount =
-      savedWork.grandTotal - outstandingAmount;
+    if (paidAmount === 0) {
 
-    savedWork.balanceAmount = outstandingAmount;
+      savedWork.paymentStatus =
+        "Unpaid";
 
-    if (savedWork.cumulativePaidAmount === 0)
-      savedWork.paymentStatus = "Unpaid";
+    }
 
     else if (
-      savedWork.cumulativePaidAmount <
+      paidAmount <
       savedWork.grandTotal
-    )
-      savedWork.paymentStatus = "Partial";
+    ) {
 
-    else
-      savedWork.paymentStatus = "Paid";
+      savedWork.paymentStatus =
+        "Partial";
+
+    }
+
+    else {
+
+      savedWork.paymentStatus =
+        "Paid";
+
+    }
 
     await savedWork.save();
 
     res.status(201).json({
-      message: "Work Created Successfully",
+
+      message:
+        "Work Created Successfully",
+
       data: savedWork
-    });
 
-  } catch (error) {
-
-    res.status(500).json({
-      message: "Error creating work",
-      error: error.message
     });
 
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      message:
+        "Error creating work",
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 
 exports.getAllWorks = async (req, res) => {
+
   try {
 
     const works = await WorkSubcontract.find()
-      .populate("subcontract", "subcontractCode name phone");
+      .populate(
+        "subcontract",
+        "subcontractCode name phone"
+      );
 
     res.status(200).json({
+
       count: works.length,
-      works
+
+      data: works
+
     });
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 // get work details by workId
 exports.getWorkById = async (req, res) => {
+
   try {
 
-    const work = await WorkSubcontract.findById(req.params.workId)
-      .populate("subcontract", "subcontractCode name phone");
+    const work = await WorkSubcontract
+      .findById(req.params.workId)
+      .populate(
+        "subcontract",
+        "subcontractCode name phone"
+      );
 
     if (!work) {
+
       return res.status(404).json({
         message: "Work not found"
       });
+
     }
 
-    res.status(200).json(work);
+    res.status(200).json({
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+      data: work
+
+    });
+
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 
 // get work details by subcontractID
 exports.getWorksBySubcontract = async (req, res) => {
+
   try {
 
     const works = await WorkSubcontract.find({
+
       subcontract: req.params.subcontractId
-    }).populate("subcontract", "subcontractCode name");
+
+    }).populate(
+
+      "subcontract",
+      "subcontractCode name"
+
+    );
 
     res.status(200).json({
+
       count: works.length,
-      works
+
+      data: works
+
     });
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 
 exports.updateWork = async (req, res) => {
+
   try {
 
     const {
+
       projectName,
+
       description,
+
       startDate,
+
       endDate,
-      status,
-      totalAmount,
-      gstPercent
+
+      status
+
     } = req.body;
 
-    const work = await WorkSubcontract.findById(req.params.id);
+    const updatedWork =
+      await WorkSubcontract.findByIdAndUpdate(
 
-    if (!work) {
+        req.params.workId,
+
+        {
+
+          projectName,
+
+          description,
+
+          startDate,
+
+          endDate,
+
+          status
+
+        },
+
+        {
+
+          new: true
+
+        }
+
+      ).populate(
+
+        "subcontract",
+
+        "subcontractCode name phone"
+
+      );
+
+    if (!updatedWork) {
+
       return res.status(404).json({
+
         message: "Work not found"
+
       });
+
     }
 
-    if (projectName) work.projectName = projectName;
-
-    if (description) work.description = description;
-
-    if (startDate) work.startDate = startDate;
-
-    if (endDate) work.endDate = endDate;
-
-    if (status) work.status = status;
-
-    if (totalAmount !== undefined)
-      work.totalAmount = Number(totalAmount);
-
-    if (gstPercent !== undefined)
-      work.gstPercent = Number(gstPercent);
-
-    // ===============================
-    // RECALCULATE GST
-    // ===============================
-
-    work.gstAmount =
-      (work.totalAmount * work.gstPercent) / 100;
-
-    work.grandTotal =
-      work.totalAmount + work.gstAmount;
-
-    // ===============================
-    // BALANCE
-    // ===============================
-
-    work.balanceAmount =
-      work.grandTotal - work.cumulativePaidAmount;
-
-    // ===============================
-    // PAYMENT STATUS
-    // ===============================
-
-    if (work.cumulativePaidAmount === 0)
-      work.paymentStatus = "Unpaid";
-
-    else if (
-      work.cumulativePaidAmount <
-      work.grandTotal
-    )
-      work.paymentStatus = "Partial";
-
-    else
-      work.paymentStatus = "Paid";
-
-    await work.save();
-
     res.status(200).json({
+
       message: "Work Updated Successfully",
-      data: work
-    });
 
-  } catch (error) {
+      data: updatedWork
 
-    res.status(500).json({
-      message: error.message
     });
 
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      error: error.message
+
+    });
+
+  }
+
 };
 
 exports.deleteWork = async (req, res) => {
+
   try {
 
-    const work = await WorkSubcontract.findById(req.params.id);
+    const work = await WorkSubcontract.findById(
+      req.params.workId
+    );
 
     if (!work) {
+
       return res.status(404).json({
         message: "Work not found"
       });
+
     }
 
     // ===============================
-    // REVERT VOUCHERS TO ADVANCE
+    // PREVENT DELETE IF PAYMENT EXISTS
     // ===============================
 
-    const vouchers = await Voucher.find({workSubcontract: work._id});
+    if (work.cumulativePaidAmount > 0) {
 
-    for (const voucher of vouchers) {
-      voucher.workSubcontract = null;
-      await voucher.save();
+      return res.status(400).json({
+        message:
+          "Cannot delete work with existing payments"
+      });
+
     }
+
+    // ===============================
+    // UNLINK VOUCHERS
+    // ===============================
+
+    await Voucher.updateMany(
+
+      {
+        "appliedWorkSubcontracts.workSubcontract":
+          req.params.workId
+      },
+
+      {
+        $pull: {
+          appliedWorkSubcontracts: {
+            workSubcontract:
+              req.params.workId
+          }
+        }
+      }
+
+    );
 
     // ===============================
     // DELETE WORK
     // ===============================
 
-    await WorkSubcontract.findByIdAndDelete(req.params.id);
+    await WorkSubcontract.findByIdAndDelete(
+      req.params.workId
+    );
 
     res.status(200).json({
-      message: "Work Deleted Successfully"
+
+      message:
+        "Work Deleted Successfully"
+
     });
 
-  } catch (error) {
-    res.status(500).json({
-      error: error.message
-    });
   }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      message:
+        "Error deleting work",
+
+      error: error.message
+
+    });
+
+  }
+
 };
 

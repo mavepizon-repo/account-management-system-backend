@@ -10,568 +10,25 @@ const fs = require("fs");
 const path = require("path");
 
 
-// ============================
-// CREATE VOUCHER
-// ============================
+// ===============================================
+// GET LABOUR VOUCHER CALCULATION
+// ===============================================
 
-exports.createVoucher = async (req, res) => {
+exports.getLabourVoucherCalculation = async (req, res) => {
   try {
-
-    const { labourId, month, year } = req.body;
-
-    const labour = await Labour.findById(labourId);
-
-    if (!labour) {
-      return res.status(404).json({ message: "Labour not found" });
-    }
-
-    const existingVoucher = await LabourVoucher.findOne({
-      labour: labourId,
-      month,
-      year
-    });
-
-    if (existingVoucher) {
-      return res.status(400).json({
-        message: "Voucher already created for this month"
-      });
-    }
-
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 1);
-
-    // ========================
-    // GET ATTENDANCE
-    // ========================
-
-    const attendanceRecords = await Attendance.find({
-      labour: labourId,
-      date: { $gte: startDate, $lt: endDate }
-    });
-
-    let totalWorkingDays = attendanceRecords.length;
-    let totalWorkingHours = 0;
-    let overtimeHours = 0;
-    let totalSalary = 0;
-
-    const perHour = labour.dailyWage / 8;
-
-    attendanceRecords.forEach(record => {
-
-      const hours = record.totalHours || 0;
-      const ot = record.overtimeHours || 0;
-
-      totalWorkingHours += hours;
-      overtimeHours += ot;
-
-      totalSalary += (hours * perHour) + (ot * perHour);
-
-    });
-
-    // ========================
-    // GET ADVANCE
-    // ========================
-
-    const advances = await AdvancePayment.find({
-      labour: labourId,
-      date: { $gte: startDate, $lt: endDate }
-    });
-
-    let totalAdvance = 0;
-
-    advances.forEach(a => {
-      totalAdvance += a.advanceAmount || 0;
-    });
-
-    const payableSalary = totalSalary - totalAdvance;
-
-    // ========================
-    // PDF FILE
-    // ========================
-
-    const monthNames = [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December"
-    ];
-
-    const doc = new PDFDocument({ margin: 50 });
-
-    const fileName = `voucher-${labourId}-${month}-${year}.pdf`;
-    const filePath = path.join(__dirname, "../../uploads", fileName);
-
-    const stream = fs.createWriteStream(filePath);
-
-    doc.pipe(stream);
-
-    // ===============================
-    // HEADER
-    // ===============================
-
-    const startX = 50;
-    const startY = 50;
-
-    const logoPath = path.join(__dirname, "../../assets/logo.jpeg");
-
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, startX, startY, { width: 110 });
-    }
-
-    const rightX = 180;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(16)
-      .text("DESIGN ART", rightX, startY);
-
-    doc.moveDown(0.5);
-
-    doc
-      .font("Helvetica")
-      .fontSize(10)
-      .text(
-        "5-6, Indria Nagar, PM Samy Colony, Ratinapuri, Gandhipuram, Coimbatore - 641012",
-        rightX,
-        doc.y,
-        { width: 350 }
-      );
-
-    doc.moveDown(0.3);
-
-    doc.text(
-      "Phone: +91 9677731326 | GST: 33BNCPP2332Q1ZT",
-      rightX,
-      doc.y,
-      { width: 350 }
-    );
-
-    const lineY = Math.max(doc.y + 10, startY + 100);
-
-    doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
-
-    // ===============================
-    // TITLE
-    // ===============================
-
-    doc
-      .fontSize(18)
-      .font("Helvetica-Bold")
-      .text("LABOUR SALARY VOUCHER", 0, lineY + 20, { align: "center" });
-
-    // ===============================
-    // INFO BOX
-    // ===============================
-
-    const boxTop = lineY + 60;
-
-    doc.rect(50, boxTop, 500, 120).stroke();
-
-    doc.fontSize(11).font("Helvetica");
-
-    let infoY = boxTop + 15;
-
-    const infoRow = (label, value) => {
-      doc.text(label, 70, infoY);
-      doc.text(value, 200, infoY);
-      infoY += 20;
-    };
-
-    infoRow("Labour Name:", labour.name);
-    infoRow("Phone:", labour.phone);
-    infoRow("Work Type:", labour.workType);
-    infoRow("Month:", `${monthNames[month - 1]} ${year}`);
-    infoRow("Daily Wage:", `Rs. ${labour.dailyWage}`);
-
-    // ===============================
-    // TABLE
-    // ===============================
-
-    const tableTop = boxTop + 150;
-
-    doc
-      .font("Helvetica-Bold")
-      .text("Description", 70, tableTop)
-      .text("Amount (Rs.)", 400, tableTop, { align: "right" });
-
-    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
-
-    doc.font("Helvetica");
-
-    let y = tableTop + 35;
-
-    const row = (label, value) => {
-
-      doc.text(label, 70, y);
-
-      // Fixed position for Rs.
-      doc.text("Rs.", 400, y);
-
-      // Amount aligned right
-      doc.text(Number(value).toFixed(2), 430, y, { width: 120, align: "right" });
-
-      y += 25;
-    };
-    
-    row("Total Working Days", totalWorkingDays);
-    row("Total Working Hours", totalWorkingHours);
-    row("Overtime Hours", overtimeHours);
-    row("Total Salary", totalSalary);
-    row("Advance Paid", totalAdvance);
-    row("Payable Salary", payableSalary);
-
-    doc.moveTo(50, y).lineTo(550, y).stroke();
-
-    // ===============================
-    // FOOTER
-    // ===============================
-
-    doc
-      .fontSize(9)
-      .text("This is a system generated voucher.", 50, y + 40, {
-        align: "center",
-        width: 500
-      });
-
-    doc.end();
-
-    await new Promise(resolve => stream.on("finish", resolve));
-
-    // ========================
-    // CLOUDINARY UPLOAD
-    // ========================
-
-    const upload = await cloudinary.uploader.upload(filePath, {
-      resource_type: "raw",
-      folder: "labour_vouchers"
-    });
-
-    const voucher = new LabourVoucher({
-      labour: labourId,
-      month,
-      year,
-      totalWorkingDays,
-      totalWorkingHours,
-      overtimeHours,
-      totalSalary,
-      totalAdvance,
-      payableSalary,
-      voucherPdf: {
-        url: upload.secure_url,
-        public_id: upload.public_id
-      }
-    });
-
-    await voucher.save();
-
-    fs.unlinkSync(filePath);
-
-    res.status(201).json({
-      message: "Voucher created successfully",
-      data: voucher
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-// ============================
-// GET ALL VOUCHERS
-// ============================
-
-exports.getAllVouchers = async (req, res) => {
-  try {
-
-    let vouchers = await LabourVoucher.find()
-      .populate("labour", "name phone")
-      .lean();
-
-    vouchers = vouchers.map(v => ({
-      ...v,
-      totalWorkingDays: v.totalWorkingDays ?? 0,
-      totalWorkingHours: v.totalWorkingHours ?? 0,
-      overtimeHours: v.overtimeHours ?? 0
-    }));
-
-    res.status(200).json(vouchers);
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// ============================
-// GET VOUCHER BY ID
-// ============================
-
-exports.getVoucherById = async (req, res) => {
-  try {
-
-    let voucher = await LabourVoucher.findById(req.params.id)
-      .populate("labour", "name phone dailyWage")
-      .lean(); // important
-
-    if (!voucher) {
-      return res.status(404).json({
-        message: "Voucher not found"
-      });
-    }
-
-    // ✅ Ensure missing fields are added
-    voucher.totalWorkingDays = voucher.totalWorkingDays ?? 0;
-    voucher.totalWorkingHours = voucher.totalWorkingHours ?? 0;
-    voucher.overtimeHours = voucher.overtimeHours ?? 0;
-
-    res.status(200).json(voucher);
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-// ============================
-// UPDATE VOUCHER
-// ============================
-
-exports.updateVoucher = async (req, res) => {
-  try {
-    const voucherId = req.params.id;
-
-    const voucher = await LabourVoucher.findById(voucherId).populate("labour");
-
-    if (!voucher) {
-      return res.status(404).json({ message: "Voucher not found" });
-    }
-
-    const labour = voucher.labour;
 
     const {
-      totalWorkingDays,
-      totalWorkingHours,
-      overtimeHours,
-      totalSalary,
-      totalAdvance,
-      payableSalary
+      labourId,
+      fromDate,
+      toDate,
+      deductedAdvanceAmount = 0
     } = req.body;
 
     // =========================
-    // UPDATE VALUES
+    // VALIDATE LABOUR
     // =========================
-    voucher.totalWorkingDays = totalWorkingDays ?? voucher.totalWorkingDays;
-    voucher.totalWorkingHours = totalWorkingHours ?? voucher.totalWorkingHours;
-    voucher.overtimeHours = overtimeHours ?? voucher.overtimeHours;
-    voucher.totalSalary = totalSalary ?? voucher.totalSalary;
-    voucher.totalAdvance = totalAdvance ?? voucher.totalAdvance;
-    voucher.payableSalary = payableSalary ?? voucher.payableSalary;
 
-    // =========================
-    // GENERATE PDF
-    // =========================
-    const monthNames = [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December"
-    ];
-
-    const doc = new PDFDocument({ margin: 50 });
-
-    const fileName = `voucher-${voucherId}.pdf`;
-    const filePath = path.join(__dirname, "../../uploads", fileName);
-
-    const stream = fs.createWriteStream(filePath);
-    doc.pipe(stream);
-
-    // -------------------------
-    // HEADER (LOGO + COMPANY)
-    // -------------------------
-    const startX = 50;
-    const startY = 50;
-
-    const logoPath = path.join(__dirname, "../../assets/logo.jpeg");
-
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, startX, startY, { width: 110 });
-    }
-
-    const rightX = 180;
-
-    doc.font("Helvetica-Bold").fontSize(16).text("DESIGN ART", rightX, startY);
-
-    doc.moveDown(0.5);
-
-    doc.font("Helvetica").fontSize(10).text(
-      "5-6, Indria Nagar, PM Samy Colony, Ratinapuri, Gandhipuram, Coimbatore - 641012",
-      rightX,
-      doc.y,
-      { width: 350 }
-    );
-
-    doc.moveDown(0.3);
-
-    doc.text(
-      "Phone: +91 9677731326 | GST: 33BNCPP2332Q1ZT",
-      rightX,
-      doc.y,
-      { width: 350 }
-    );
-
-    const lineY = Math.max(doc.y + 10, startY + 100);
-
-    doc.moveTo(50, lineY).lineTo(550, lineY).stroke();
-
-    // -------------------------
-    // TITLE
-    // -------------------------
-    doc
-      .fontSize(18)
-      .font("Helvetica-Bold")
-      .text("LABOUR SALARY VOUCHER", 0, lineY + 20, { align: "center" });
-
-    // -------------------------
-    // INFO BOX
-    // -------------------------
-    const boxTop = lineY + 60;
-
-    doc.rect(50, boxTop, 500, 120).stroke();
-
-    let infoY = boxTop + 15;
-
-    const infoRow = (label, value) => {
-      doc.fontSize(11).font("Helvetica");
-      doc.text(label, 70, infoY);
-      doc.text(value, 200, infoY);
-      infoY += 20;
-    };
-
-    infoRow("Labour Name:", labour.name);
-    infoRow("Phone:", labour.phone);
-    infoRow("Work Type:", labour.workType);
-    infoRow("Month:", `${monthNames[voucher.month - 1]} ${voucher.year}`);
-    infoRow("Daily Wage:", `Rs. ${labour.dailyWage}`);
-
-    // -------------------------
-    // TABLE
-    // -------------------------
-    const tableTop = boxTop + 150;
-
-    doc.font("Helvetica-Bold")
-      .text("Description", 70, tableTop)
-      .text("Amount (Rs.)", 400, tableTop, { align: "right" });
-
-    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
-
-    let y = tableTop + 35;
-
-    const row = (label, value) => {
-      doc.font("Helvetica");
-      doc.text(label, 70, y);
-      doc.text("Rs.", 400, y);
-      doc.text(Number(value || 0).toFixed(2), 430, y, {
-        width: 120,
-        align: "right"
-      });
-      y += 25;
-    };
-
-    row("Total Working Days", voucher.totalWorkingDays);
-    row("Total Working Hours", voucher.totalWorkingHours);
-    row("Overtime Hours", voucher.overtimeHours);
-    row("Total Salary", voucher.totalSalary);
-    row("Advance Paid", voucher.totalAdvance);
-
-    doc.font("Helvetica-Bold");
-    row("Payable Salary", voucher.payableSalary);
-    doc.font("Helvetica");
-
-    doc.moveTo(50, y).lineTo(550, y).stroke();
-
-    doc.fontSize(9).text(
-      "This is a system generated voucher.",
-      50,
-      y + 40,
-      { align: "center", width: 500 }
-    );
-
-    doc.end();
-
-    await new Promise(resolve => stream.on("finish", resolve));
-
-    // =========================
-    // DELETE OLD PDF (IMPORTANT FIX)
-    // =========================
-    if (voucher.voucherPdf?.public_id) {
-      await cloudinary.uploader.destroy(voucher.voucherPdf.public_id, {
-        resource_type: "raw"
-      });
-    }
-
-    // =========================
-    // UPLOAD NEW PDF
-    // =========================
-    const upload = await cloudinary.uploader.upload(filePath, {
-      resource_type: "raw",
-      folder: "labour_vouchers"
-    });
-
-    // =========================
-    // SAVE NEW DATA
-    // =========================
-    voucher.voucherPdf = {
-      url: upload.secure_url,
-      public_id: upload.public_id
-    };
-
-    await voucher.save();
-
-    // =========================
-    // CLEAN LOCAL FILE
-    // =========================
-    fs.unlinkSync(filePath);
-
-    return res.status(200).json({
-      message: "Voucher updated successfully",
-      data: voucher
-    });
-
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-};
-
-
-// ============================
-// DELETE VOUCHER
-// ============================
-
-exports.deleteVoucher = async (req, res) => {
-  try {
-
-    const voucher = await LabourVoucher.findByIdAndDelete(req.params.id);
-
-    if (!voucher) {
-      return res.status(404).json({
-        message: "Voucher not found"
-      });
-    }
-
-    res.status(200).json({
-      message: "Voucher deleted successfully"
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-// ============================
-// GET VOUCHERS BY LABOUR ID
-// ============================
-
-exports.getVouchersByLabourId = async (req, res) => {
-  try {
-
-    const labour = await Labour.findById(req.params.labourId);
+    const labour = await Labour.findById(labourId);
 
     if (!labour) {
       return res.status(404).json({
@@ -579,13 +36,1008 @@ exports.getVouchersByLabourId = async (req, res) => {
       });
     }
 
-    const vouchers = await LabourVoucher.find({
-      labour: labour._id
-    }).sort({ year: -1, month: -1 });
+    // =========================
+    // DATE RANGE
+    // =========================
 
-    res.status(200).json(vouchers);
+    const startDate = new Date(fromDate);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(toDate);
+    endDate.setHours(23, 59, 59, 999);
+
+    // =========================
+    // GET ATTENDANCE
+    // =========================
+
+    const attendance = await Attendance.find({
+      labour: labour._id,
+      salaryPaid: false,
+      date: {
+        $gte: startDate,
+        $lte: endDate
+      }
+    }).sort({ date: 1 });
+
+    // =========================
+    // CALCULATIONS
+    // =========================
+
+    const totalWorkingDays = attendance.length;
+
+    const totalWorkingHours = attendance.reduce(
+      (sum, item) => sum + item.totalHours,
+      0
+    );
+
+    const overtimeHours = attendance.reduce(
+      (sum, item) => sum + item.overtimeHours,
+      0
+    );
+
+    // =========================
+    // SALARY CALCULATION
+    // =========================
+
+    const perHourSalary = labour.dailyWage / 8;
+
+    const normalHours =
+      totalWorkingHours - overtimeHours;
+
+    const normalSalary =
+      normalHours * perHourSalary;
+
+    const overtimeSalary =
+      overtimeHours * perHourSalary;
+
+    const totalSalary =
+      normalSalary + overtimeSalary;
+
+    // =========================
+    // ADVANCE CALCULATION
+    // =========================
+
+    const advance = await AdvancePayment.findOne({
+      labour: labour._id,
+      remainingAmount: { $gt: 0 }
+    });
+
+    
+    let totalAdvanceGiven = 0;
+  
+    let deductedAmount = 0;
+
+    let remainingAdvanceAmount = 0;
+
+    let advanceDetails = null;
+
+    if (advance) {
+
+      totalAdvanceGiven =
+        advance.advanceAmount;
+
+      // ======================================
+      // MONTHLY INSTALLMENT
+      // ======================================
+
+      if (
+        advance.deductionType ===
+        "Monthly Installment"
+      ) {
+
+        deductedAmount =
+          advance.advanceAmount /
+          advance.installmentMonths;
+
+      }
+
+      // ======================================
+      // FIXED AMOUNT
+      // ======================================
+
+      else if (
+        advance.deductionType ===
+        "Fixed Amount"
+      ) {
+
+        deductedAmount =
+          advance.fixedDeductionAmount;
+
+      }
+
+      // ======================================
+      // CUSTOM
+      // ======================================
+
+      else if (
+        advance.deductionType ===
+        "Custom"
+      ) {
+
+        deductedAmount =
+          Number(deductedAdvanceAmount || 0);
+
+      }
+
+      deductedAmount =
+        Number(
+          deductedAmount.toFixed(2)
+        );
+
+      // ======================================
+      // SAFETY CHECK
+      // ======================================
+
+      if (
+        deductedAmount >
+        advance.remainingAmount
+      ) {
+
+        deductedAmount =
+          advance.remainingAmount;
+
+      }
+
+      remainingAdvanceAmount =
+        advance.remainingAmount -
+        deductedAmount;
+
+      advanceDetails = {
+
+        advanceId: advance._id,
+
+        advanceAmount:
+          advance.advanceAmount,
+
+        deductionType:
+          advance.deductionType,
+
+        deductedAmount,
+
+        remainingBefore:
+          advance.remainingAmount,
+
+        remainingAfter:
+          remainingAdvanceAmount
+      };
+    }
+
+    // =========================
+    // FINAL PAYABLE
+    // =========================
+
+    const payableSalary =
+      totalSalary - deductedAmount;
+
+    // =========================
+    // RESPONSE
+    // =========================
+
+    res.json({
+      labour,
+      fromDate,
+      toDate,
+
+      totalWorkingDays,
+
+      totalWorkingHours:
+        Number(totalWorkingHours.toFixed(2)),
+
+      overtimeHours:
+        Number(overtimeHours.toFixed(2)),
+
+      totalSalary:
+        Number(totalSalary.toFixed(2)),
+
+      totalAdvanceGiven,
+
+      deductedAdvanceAmount: deductedAmount,
+
+      remainingAdvanceAmount,
+
+      payableSalary:
+        Number(payableSalary.toFixed(2)),
+
+      advanceDetails,
+
+      attendance
+    });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    res.status(500).json({
+      message: error.message
+    });
+
   }
 };
+
+
+// ===============================================
+// CREATE LABOUR VOUCHER
+// ===============================================
+
+exports.createLabourVoucher = async (req, res) => {
+
+  try {
+
+    const {
+
+      labourId,
+      fromDate,
+      toDate,
+
+      // ADMIN EDITED VALUE
+      deductedAmount
+
+    } = req.body;
+
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
+    if (
+      !labourId ||
+      !fromDate ||
+      !toDate
+    ) {
+
+      return res.status(400).json({
+        message:
+          "labourId, fromDate and toDate required"
+      });
+
+    }
+
+    // ==========================================
+    // LABOUR
+    // ==========================================
+
+    const labour = await Labour.findById(
+      labourId
+    );
+
+    if (!labour) {
+
+      return res.status(404).json({
+        message: "Labour not found"
+      });
+
+    }
+
+    const start = new Date(fromDate);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(toDate);
+    end.setHours(23, 59, 59, 999);
+
+    // ==========================================
+    // DUPLICATE RANGE CHECK
+    // ==========================================
+
+    const existingLabourVoucher =
+      await LabourVoucher.findOne({
+
+        labour: labourId,
+
+        fromDate: { $lte: end },
+
+        toDate: { $gte: start }
+
+      });
+
+    if (existingLabourVoucher) {
+
+      return res.status(400).json({
+        message:
+          "Labour voucher already exists for selected range"
+      });
+
+    }
+
+    // ==========================================
+    // ATTENDANCE
+    // ==========================================
+
+    const attendanceRecords =
+      await Attendance.find({
+
+        labour: labourId,
+
+        salaryPaid: false,
+
+        date: {
+          $gte: start,
+          $lte: end
+        }
+
+      }).sort({ date: 1 });
+
+    // ==========================================
+    // CALCULATIONS
+    // ==========================================
+
+    let totalWorkingDays =
+      attendanceRecords.length;
+
+    let totalWorkingHours = 0;
+
+    let overtimeHours = 0;
+
+    let totalSalary = 0;
+
+    const perHour =
+      labour.dailyWage / 8;
+
+    attendanceRecords.forEach(record => {
+
+      const hours =
+        record.totalHours || 0;
+
+      const ot =
+        record.overtimeHours || 0;
+
+      totalWorkingHours += hours;
+
+      overtimeHours += ot;
+
+      // overtime already included in totalHours
+      totalSalary += hours * perHour;
+
+    });
+
+    // ==========================================
+    // ROUND VALUES
+    // ==========================================
+
+    totalWorkingHours =
+      Number(totalWorkingHours.toFixed(2));
+
+    overtimeHours =
+      Number(overtimeHours.toFixed(2));
+
+    totalSalary =
+      Number(totalSalary.toFixed(2));
+    // ==========================================
+    // SINGLE ADVANCE
+    // ==========================================
+
+    const advance =
+      await AdvancePayment.findOne({
+
+        labour: labourId,
+
+        remainingAmount: { $gt: 0 }
+
+      }).sort({ createdAt: 1 });
+
+    let totalAdvanceGiven = 0;
+
+    let deductedAdvanceAmount = 0;
+
+    let remainingAdvanceAmount = 0;
+
+    let advanceDetails = null;
+
+    // ==========================================
+    // ADVANCE PROCESS
+    // ==========================================
+
+    if (advance) {
+
+      totalAdvanceGiven =
+        advance.advanceAmount;
+
+      if (
+        advance.deductionType ===
+        "Monthly Installment"
+      ) {
+
+        deductedAdvanceAmount =
+          advance.advanceAmount /
+          advance.installmentMonths;
+
+      }
+
+      else if (
+        advance.deductionType ===
+        "Fixed Amount"
+      ) {
+
+        deductedAdvanceAmount =
+          advance.fixedDeductionAmount;
+
+      }
+
+      else if (
+        advance.deductionType ===
+        "Custom"
+      ) {
+
+        deductedAdvanceAmount =
+          Number(deductedAmount || 0);
+
+      }
+
+      // ======================================
+      // NEGATIVE CHECK
+      // ======================================
+
+      if (deductedAdvanceAmount < 0) {
+
+        return res.status(400).json({
+          message:
+            "Deduction amount cannot be negative"
+        });
+
+      }
+
+      // ======================================
+      // SAFETY CHECK
+      // ======================================
+
+      if (
+        deductedAdvanceAmount >
+        advance.remainingAmount
+      ) {
+
+        return res.status(400).json({
+          message:
+            `Deduction amount exceeds remaining advance amount. Maximum allowed is Rs.${advance.remainingAmount}`
+        });
+
+      }
+
+      // ======================================
+      // UPDATE ADVANCE
+      // ======================================
+
+      advance.deductedAmount +=
+        deductedAdvanceAmount;
+
+      advance.remainingAmount -=
+        deductedAdvanceAmount;
+
+      // ======================================
+      // STATUS
+      // ======================================
+
+      if (
+        advance.remainingAmount <= 0
+      ) {
+
+        advance.remainingAmount = 0;
+
+        advance.status = "Paid";
+
+      }
+
+      else if (
+        advance.remainingAmount <
+        advance.advanceAmount
+      ) {
+
+        advance.status = "Partial";
+
+      }
+
+      else {
+
+        advance.status = "Pending";
+
+      }
+
+      await advance.save();
+
+      remainingAdvanceAmount =
+        advance.remainingAmount;
+
+      advanceDetails = {
+
+        advanceId: advance._id,
+
+        deductionType:
+          advance.deductionType,
+
+        deductedAmount:
+          Number(
+            deductedAdvanceAmount.toFixed(2)
+          )
+      };
+    }
+
+    // ==========================================
+    // FINAL VALUES
+    // ==========================================
+
+    const payableSalary =
+      totalSalary -
+      deductedAdvanceAmount;
+
+    // ==========================================
+    // PDF GENERATION
+    // ==========================================
+
+    const doc =
+      new PDFDocument({
+        margin: 50
+      });
+
+    const fileName =
+      `labour-voucher-${Date.now()}.pdf`;
+
+    const filePath = path.join(
+      __dirname,
+      "../../uploads",
+      fileName
+    );
+
+    const stream =
+      fs.createWriteStream(filePath);
+
+    doc.pipe(stream);
+
+    // ==========================================
+    // TITLE
+    // ==========================================
+
+    doc
+      .fontSize(18)
+      .text(
+        "LABOUR SALARY VOUCHER",
+        {
+          align: "center"
+        }
+      );
+
+    doc.moveDown();
+
+    // ==========================================
+    // LABOUR DETAILS
+    // ==========================================
+
+    doc.text(
+      `Labour : ${labour.name}`
+    );
+
+    doc.text(
+      `Phone : ${labour.phone || "-"}`
+    );
+
+    doc.text(
+      `From Date : ${fromDate}`
+    );
+
+    doc.text(
+      `To Date : ${toDate}`
+    );
+
+    doc.moveDown();
+
+    // ==========================================
+    // SALARY DETAILS
+    // ==========================================
+
+    doc.text(
+      `Total Working Days : ${totalWorkingDays}`
+    );
+
+    doc.text(
+      `Total Working Hours : ${Number(
+        totalWorkingHours.toFixed(2)
+      )}`
+    );
+
+    doc.text(
+      `Overtime Hours : ${Number(
+        overtimeHours.toFixed(2)
+      )}`
+    );
+
+    doc.text(
+      `Total Salary : Rs.${Number(
+        totalSalary.toFixed(2)
+      )}`
+    );
+
+    doc.text(
+      `Advance Deduction : Rs.${Number(
+        deductedAdvanceAmount.toFixed(2)
+      )}`
+    );
+
+    doc.text(
+      `Remaining Advance : Rs.${Number(
+        remainingAdvanceAmount.toFixed(2)
+      )}`
+    );
+
+    doc.text(
+      `Payable Salary : Rs.${Number(
+        payableSalary.toFixed(2)
+      )}`
+    );
+
+    // ==========================================
+    // ADVANCE DETAILS
+    // ==========================================
+
+    if (advanceDetails) {
+
+      doc.moveDown();
+
+      doc.fontSize(14).text(
+        "Advance Details"
+      );
+
+      doc.moveDown(0.5);
+
+      doc.text(
+        `Deduction Type : ${advanceDetails.deductionType}`
+      );
+
+      doc.text(
+        `Deducted Amount : Rs.${advanceDetails.deductedAmount}`
+      );
+    }
+
+    doc.end();
+
+    await new Promise(resolve =>
+      stream.on("finish", resolve)
+    );
+
+    // ==========================================
+    // CLOUDINARY UPLOAD
+    // ==========================================
+
+    const upload =
+      await cloudinary.uploader.upload(
+        filePath,
+        {
+          resource_type: "raw",
+          folder: "labour_vouchers"
+        }
+      );
+
+    // ==========================================
+    // SAVE LABOUR VOUCHER
+    // ==========================================
+
+    const labourVoucher =
+      new LabourVoucher({
+
+        labour: labourId,
+
+        fromDate,
+        toDate,
+
+        month:
+          new Date(fromDate).getMonth() + 1,
+
+        year:
+          new Date(fromDate).getFullYear(),
+
+        totalWorkingDays,
+
+        totalWorkingHours:
+          Number(
+            totalWorkingHours.toFixed(2)
+          ),
+
+        overtimeHours:
+          Number(
+            overtimeHours.toFixed(2)
+          ),
+
+        totalSalary:
+          Number(
+            totalSalary.toFixed(2)
+          ),
+
+        totalAdvanceGiven:
+          Number(
+            totalAdvanceGiven.toFixed(2)
+          ),
+
+        deductedAdvanceAmount:
+          Number(
+            deductedAdvanceAmount.toFixed(2)
+          ),
+
+        remainingAdvanceAmount:
+          Number(
+            remainingAdvanceAmount.toFixed(2)
+          ),
+
+        payableSalary:
+          Number(
+            payableSalary.toFixed(2)
+          ),
+
+        voucherPdf: {
+          url: upload.secure_url,
+          public_id:
+            upload.public_id
+        }
+      });
+
+    await labourVoucher.save();
+
+    await Attendance.updateMany(
+    {
+      _id: {
+        $in: attendanceRecords.map(
+          a => a._id
+        )
+      }
+    },
+    {
+      salaryPaid: true
+    }
+  );
+
+    // ==========================================
+    // DELETE LOCAL FILE
+    // ==========================================
+
+    fs.unlinkSync(filePath);
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    res.status(201).json({
+
+      message:
+        "Labour voucher created successfully",
+
+      data: labourVoucher
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: error.message
+    });
+
+  }
+};
+
+
+
+exports.getAllVouchers = async (req, res) => {
+  try {
+
+    const vouchers =
+      await LabourVoucher.find()
+        .populate(
+          "labour",
+          "labourId name phone workType"
+        )
+        .sort({ createdAt: -1 });
+
+    res.json({
+      count: vouchers.length,
+      data: vouchers
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+exports.getVoucherById = async (req, res) => {
+  try {
+
+    const voucher =
+      await LabourVoucher.findById(
+        req.params.id
+      ).populate(
+        "labour",
+        "labourId name phone workType"
+      );
+
+    if (!voucher) {
+
+      return res.status(404).json({
+        message: "Voucher not found"
+      });
+
+    }
+
+    res.json(voucher);
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+exports.getVouchersByLabourId = async (req, res) => {
+  try {
+
+    const labour =
+      await Labour.findById(
+        req.params.labourId
+      );
+
+    if (!labour) {
+
+      return res.status(404).json({
+        message: "Labour not found"
+      });
+
+    }
+
+    const vouchers =
+      await LabourVoucher.find({
+        labour: labour._id
+      })
+        .populate(
+          "labour",
+          "labourId name phone"
+        )
+        .sort({ fromDate: -1 });
+
+    res.json({
+      count: vouchers.length,
+      data: vouchers
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+exports.deleteVoucher = async (req, res) => {
+  try {
+
+    const voucher =
+      await LabourVoucher.findById(
+        req.params.id
+      );
+
+    if (!voucher) {
+
+      return res.status(404).json({
+        message: "Voucher not found"
+      });
+
+    }
+
+    // ====================================
+    // DELETE PDF FROM CLOUDINARY
+    // ====================================
+
+    if (
+      voucher.voucherPdf &&
+      voucher.voucherPdf.public_id
+    ) {
+
+      await cloudinary.uploader.destroy(
+        voucher.voucherPdf.public_id,
+        {
+          resource_type: "raw"
+        }
+      );
+
+    }
+
+    // ====================================
+    // RESTORE ADVANCE
+    // ====================================
+
+    const advance =
+      await AdvancePayment.findOne({
+        labour: voucher.labour
+      });
+
+    if (advance) {
+
+      advance.deductedAmount -=
+        voucher.deductedAdvanceAmount;
+
+      advance.remainingAmount +=
+        voucher.deductedAdvanceAmount;
+
+      // SAFETY
+      if (advance.deductedAmount < 0) {
+
+        advance.deductedAmount = 0;
+
+      }
+
+      // SAFETY
+      if (
+        advance.remainingAmount >
+        advance.advanceAmount
+      ) {
+
+        advance.remainingAmount =
+          advance.advanceAmount;
+
+      }
+
+      // ====================================
+      // STATUS
+      // ====================================
+
+      if (advance.remainingAmount === 0) {
+
+        advance.status = "Paid";
+
+      }
+
+      else if (
+        advance.remainingAmount <
+        advance.advanceAmount
+      ) {
+
+        advance.status = "Partial";
+
+      }
+
+      else {
+
+        advance.status = "Pending";
+
+      }
+
+      await advance.save();
+    }
+
+    // ====================================
+    // RESTORE ATTENDANCE
+    // ====================================
+
+    await Attendance.updateMany(
+      {
+        labour: voucher.labour,
+
+        date: {
+          $gte: voucher.fromDate,
+          $lte: voucher.toDate
+        }
+      },
+      {
+        salaryPaid: false
+      }
+    );
+
+    // ====================================
+    // DELETE VOUCHER
+    // ====================================
+
+    await LabourVoucher.findByIdAndDelete(
+      req.params.id
+    );
+
+    res.json({
+      message:
+        "Voucher deleted successfully"
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
