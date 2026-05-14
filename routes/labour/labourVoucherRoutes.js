@@ -5,7 +5,7 @@ const labourVoucherController = require("../../controllers/labour/labourVoucherC
 
 
 router.post("/create", labourVoucherController.createLabourVoucher);
-router.get("/calculate", labourVoucherController.getLabourVoucherCalculation);
+router.post("/calculate", labourVoucherController.getLabourVoucherCalculation);
 
 
 router.get("/getall", labourVoucherController.getAllVouchers);
